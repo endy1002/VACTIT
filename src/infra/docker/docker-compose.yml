@@ -1,0 +1,80 @@
+version: '3.8'
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: vactit-postgres
+    environment:
+      POSTGRES_USER: vactit
+      POSTGRES_PASSWORD: vactit_password
+      POSTGRES_DB: vactit_db
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - vactit-network
+
+  redis:
+    image: redis:7-alpine
+    container_name: vactit-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    networks:
+      - vactit-network
+
+  web:
+    build:
+      context: ../../..
+      dockerfile: ./src/infra/docker/Dockerfile.web
+    container_name: vactit-web
+    ports:
+      - "3000:3000"
+    environment:
+      - DATABASE_URL=postgresql://vactit:vactit_password@postgres:5432/vactit_db
+      - REDIS_URL=redis://redis:6379
+      - NEXTAUTH_URL=http://localhost:3000
+    depends_on:
+      - postgres
+      - redis
+    networks:
+      - vactit-network
+
+  api:
+    build:
+      context: ../../..
+      dockerfile: ./src/infra/docker/Dockerfile.api
+    container_name: vactit-api
+    ports:
+      - "3001:3001"
+    environment:
+      - DATABASE_URL=postgresql://vactit:vactit_password@postgres:5432/vactit_db
+      - REDIS_URL=redis://redis:6379
+    depends_on:
+      - postgres
+      - redis
+    networks:
+      - vactit-network
+
+  worker:
+    build:
+      context: ../../..
+      dockerfile: ./src/infra/docker/Dockerfile.worker
+    container_name: vactit-worker
+    environment:
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+    depends_on:
+      - redis
+    networks:
+      - vactit-network
+
+volumes:
+  postgres_data:
+  redis_data:
+
+networks:
+  vactit-network:
+    driver: bridge

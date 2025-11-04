@@ -1,0 +1,13 @@
+# API Service Dockerfile
+FROM node:20-alpine
+
+WORKDIR /app
+
+COPY src/services/api/package*.json ./
+RUN npm install
+
+COPY src/services/api/ ./
+
+EXPOSE 3001
+
+CMD ["npm", "start"]

@@ -1,0 +1,6 @@
+{
+  "version": 3,
+  "sources": [],
+  "sections": [
+    {"offset": {"line": 14, "column": 0}, "map": {"version":3,"sources":["file:///Users/endy/Documents/MAIN%20APCS/YEAR%203%20/Term%201%20/SE%20/VACTIT/src/apps/web/app/page.tsx"],"sourcesContent":["export default function Home() {\n  return (\n    <main className=\"flex min-h-screen flex-col items-center justify-center p-24\">\n      <h1 className=\"text-4xl font-bold\">Welcome to VACTIT</h1>\n    </main>\n  );\n}\n"],"names":[],"mappings":";;;;;;AAAe,SAAS;IACtB,qBACE,8OAAC;QAAK,WAAU;kBACd,cAAA,8OAAC;YAAG,WAAU;sBAAqB;;;;;;;;;;;AAGzC","debugId":null}}]
+}

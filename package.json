@@ -1,12 +1,23 @@
 {
-  "name": "vactit",
+  "name": "vactit-monorepo",
   "version": "0.1.0",
   "private": true,
+  "workspaces": [
+    "src/apps/*",
+    "src/packages/*",
+    "src/services/*"
+  ],
   "scripts": {
-    "dev": "next dev",
-    "build": "next build",
-    "start": "next start",
-    "lint": "next lint"
+    "dev": "npm run dev --workspace=src/apps/web",
+    "dev:api": "npm run dev --workspace=src/services/api",
+    "dev:worker": "npm run dev --workspace=src/services/worker",
+    "build": "npm run build --workspaces --if-present",
+    "lint": "npm run lint --workspaces --if-present",
+    "type-check": "npm run type-check --workspaces --if-present",
+    "docker:up": "cd src/infra/docker && docker-compose up -d",
+    "docker:down": "cd src/infra/docker && docker-compose down",
+    "prisma:generate": "cd src/prisma && npx prisma generate",
+    "prisma:migrate": "cd src/prisma && npx prisma migrate dev"
   },
   "dependencies": {
     "@auth/prisma-adapter": "^2.11.0",
