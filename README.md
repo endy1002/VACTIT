@@ -96,7 +96,7 @@ Visit:
 - **PostgreSQL**: localhost:5432
 - **Redis**: localhost:6379
 
-## 📦 Architecture
+## Architecture
 
 ### N-Tier Architecture
 
@@ -136,7 +136,7 @@ Visit:
 - Server actions
 - Business logic
 
-## 🐳 Docker Setup
+## Docker Setup
 
 ```bash
 # Start all services
@@ -153,7 +153,7 @@ docker-compose build
 docker-compose logs -f
 ```
 
-## 📜 Available Scripts
+## Available Scripts
 
 ### Root Level
 ```bash
@@ -188,7 +188,7 @@ npm run dev
 npm run start
 ```
 
-## 🛠️ Tech Stack
+## Tech Stack
 
 ### Frontend
 - **Next.js 16** - React framework
@@ -214,7 +214,7 @@ npm run start
 - **Kubernetes** - Production orchestration (future)
 - **Terraform** - Infrastructure as Code (future)
 
-## 🔐 Authentication
+## Authentication
 
 Uses **NextAuth.js v5** with:
 - Credentials provider
@@ -238,7 +238,7 @@ npx prisma migrate deploy
 npx prisma migrate reset
 ```
 
-## 🚀 Deployment
+## Deployment
 
 ### Docker Deployment
 ```bash
@@ -261,23 +261,3 @@ NEXTAUTH_URL=http://localhost:3000
 NEXTAUTH_SECRET=your-secret-here
 ```
 
-## 📝 Documentation
-
-- **[STRUCTURE.md](./STRUCTURE.md)** - Detailed structure guide
-- **[CONFIG.md](./CONFIG.md)** - Configuration guide
-- **[docs/](./docs/)** - Additional documentation
-
-## 🤝 Contributing
-
-1. Create a feature branch
-2. Make your changes
-3. Write/update tests
-4. Submit a pull request
-
-## 📄 License
-
-MIT
-
----
-
-**Built with ❤️ by the VACTIT Team**

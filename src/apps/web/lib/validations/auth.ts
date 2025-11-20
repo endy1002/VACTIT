@@ -1,20 +1,48 @@
-import { z } from 'zod';
+import NextAuth, { NextAuthConfig } from 'next-auth';
+import { PrismaAdapter } from '@auth/prisma-adapter';
+import { prisma } from '@/lib/prisma';
+import CredentialsProvider from 'next-auth/providers/credentials';
 
-export const loginSchema = z.object({
-  email: z.string().email('Invalid email address'),
-  password: z.string().min(8, 'Password must be at least 8 characters'),
-});
+export const authConfig: NextAuthConfig = {
+  adapter: PrismaAdapter(prisma),
+  session: {
+    strategy: 'jwt',
+  },
+  pages: {
+    signIn: '/auth/signin',
+  },
+  providers: [
+    CredentialsProvider({
+      name: 'credentials',
+      credentials: {
+        email: { label: 'Email', type: 'email' },
+        password: { label: 'Password', type: 'password' },
+      },
+      async authorize(credentials) {
+        // Implement your authentication logic here
+        if (!credentials?.email || !credentials?.password) {
+          return null;
+        }
 
-export const registerSchema = z.object({
-  email: z.string().email('Invalid email address'),
-  password: z
-    .string()
-    .min(8, 'Password must be at least 8 characters')
-    .regex(/[A-Z]/, 'Password must contain at least one uppercase letter')
-    .regex(/[a-z]/, 'Password must contain at least one lowercase letter')
-    .regex(/[0-9]/, 'Password must contain at least one number'),
-  name: z.string().min(2, 'Name must be at least 2 characters'),
-});
+        // TODO: Implement user verification
+        return null;
+      },
+    }),
+  ],
+  callbacks: {
+    async jwt({ token, user }) {
+      if (user) {
+        token.id = user.id;
+      }
+      return token;
+    },
+    async session({ session, token }) {
+      if (session.user) {
+        (session.user as any).id = token.id as string;
+      }
+      return session;
+    },
+  },
+};
 
-export type LoginInput = z.infer<typeof loginSchema>;
-export type RegisterInput = z.infer<typeof registerSchema>;
+export const { handlers, auth, signIn, signOut } = NextAuth(authConfig);
