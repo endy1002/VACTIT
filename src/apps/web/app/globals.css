@@ -1,3 +1,8 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+@import "tailwindcss";
+
 :root {
   --color-bg: #f5f7ff;
   --color-sidebar-bg: #ffffff;
