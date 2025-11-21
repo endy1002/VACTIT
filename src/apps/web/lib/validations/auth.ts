@@ -1,15 +1,16 @@
-import NextAuth, { NextAuthConfig } from 'next-auth';
+import type {  NextAuthOptions } from 'next-auth';
 import { PrismaAdapter } from '@auth/prisma-adapter';
-import { prisma } from '@/lib/prisma';
+import { prisma } from '@/lib/validations/prisma';
 import CredentialsProvider from 'next-auth/providers/credentials';
+import { verifyPassword } from './passwordhelpers';
 
-export const authConfig: NextAuthConfig = {
+export const authOptions: NextAuthOptions= {
   adapter: PrismaAdapter(prisma),
   session: {
     strategy: 'jwt',
   },
   pages: {
-    signIn: '/auth/signin',
+    signIn: '/auth/login',
   },
   providers: [
     CredentialsProvider({
@@ -19,14 +20,20 @@ export const authConfig: NextAuthConfig = {
         password: { label: 'Password', type: 'password' },
       },
       async authorize(credentials) {
-        // Implement your authentication logic here
-        if (!credentials?.email || !credentials?.password) {
-          return null;
-        }
-
-        // TODO: Implement user verification
-        return null;
-      },
+    try {
+      if (!credentials?.email || !credentials?.password) return null;
+      const email = String(credentials.email);
+      const password = String(credentials.password);
+      const user = await prisma.user.findUnique({ where: { email } });
+      if (!user || typeof user.password !== 'string') return null;
+      const ok = await verifyPassword(password, user.password);
+      if (!ok) return null;
+      return { id: user.id, name: user.name ?? undefined, email: user.email };
+    } catch (err) {
+      console.error('authorize error:', err); // log to dev terminal
+      throw err; // let NextAuth handle/re-throw for visibility
+    }
+  },
     }),
   ],
   callbacks: {
@@ -45,4 +52,4 @@ export const authConfig: NextAuthConfig = {
   },
 };
 
-export const { handlers, auth, signIn, signOut } = NextAuth(authConfig);
+// export const { handlers, auth, signIn, signOut } = NextAuth(authConfig);
