@@ -1,11 +1,13 @@
 version: '3.8'
 
+name: vactit
+
 services:
   postgres:
     image: postgres:16-alpine
     container_name: vactit-postgres
     environment:
-      POSTGRES_USER: vactit
+      POSTGRES_USER: vactit_user
       POSTGRES_PASSWORD: vactit_password
       POSTGRES_DB: vactit_db
     ports:

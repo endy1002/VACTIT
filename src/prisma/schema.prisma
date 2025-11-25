@@ -1,59 +1,85 @@
-// This is your Prisma schema file,
-// learn more about it in the docs: https://pris.ly/d/prisma-schema
-
 generator client {
   provider = "prisma-client-js"
 }
 
 datasource db {
-  provider = "sqlite"
+  provider = "postgresql"
   url      = env("DATABASE_URL")
 }
 
 model User {
-  id            String    @id @default(cuid())
-  name          String?
-  email         String    @unique
-  emailVerified DateTime?
-  password String? // bcrypt hash for credentials
-  image         String?
-  accounts      Account[]
-  sessions      Session[]
-  createdAt     DateTime  @default(now())
-  updatedAt     DateTime  @updatedAt
+  /// PK: e.g. STU0001, AUTH0001
+  user_id       String   @id
+  name          String
+  email         String   @unique
+  phone         String?
+  /// 'Student' | 'Author' | 'Admin'
+  role          String
+  /// 'Regular' | 'VIP', default 'Regular'
+  membership    String   @default("Regular")
+  created_at    DateTime
+  hash_password String
+
+  // Relations
+  authoredTests Test[]   @relation("UserTests")
+  trials        Trial[]  @relation("StudentTrials")
 }
 
-model Account {
-  id                String  @id @default(cuid())
-  userId            String
-  type              String
-  provider          String
-  providerAccountId String
-  refresh_token     String?
-  access_token      String?
-  expires_at        Int?
-  token_type        String?
-  scope             String?
-  id_token          String?
-  session_state     String?
+model Test {
+  /// PK: varchar(10), e.g. '00001'
+  /// Note: autoincrement formatting (00001) is handled in app logic, not Prisma.
+  test_id   String   @id
+  author_id String
+  title     String
+  /// nullable for 'practice'
+  start_time DateTime?
+  /// 'exam' | 'practice'
+  type      String
+  /// 'Premium' | 'Regular', default 'Regular'
+  status    String   @default("Regular")
+  /// nullable for 'practice'
+  due_time  DateTime?
+  url       String
+  /// duration in seconds, can be null if you want
+  duration  Int?
 
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  @@unique([provider, providerAccountId])
+  // Relations
+  author User    @relation("UserTests", fields: [author_id], references: [user_id])
+  trials Trial[]
 }
 
-model Session {
-  id           String   @id @default(cuid())
-  sessionToken String   @unique
-  userId       String
-  expires      DateTime
-  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+model Trial {
+  /// PK: e.g. "STU0001_00001_001"
+  trial_id        String   @id
+  student_id      String
+  test_id         String
+  start_time      DateTime
+  end_time        DateTime
+  raw_score       Decimal  @default(0)
+  processed_score Decimal  @default(0)
+  /// JSONB in Postgres → Json in Prisma
+  tactic          Json?
+
+  // Relations
+  student   User    @relation("StudentTrials", fields: [student_id], references: [user_id], onDelete: Cascade)
+  test      Test    @relation(fields: [test_id], references: [test_id], onDelete: Cascade)
+  responses Response[]
 }
 
-model VerificationToken {
-  identifier String
-  token      String   @unique
-  expires    DateTime
+model Response {
+  /// composite PK (trial_id, question_id)
+  trial_id      String
+  question_id   String
+  /// 'A' | 'B' | 'C' | 'D', nullable
+  chosen_option String?
+  /// time in seconds (>= 0)
+  response_time Decimal
 
-  @@unique([identifier, token])
+  // Relations
+  trial Trial @relation(fields: [trial_id], references: [trial_id], onDelete: Cascade)
+  // TODO: add Question and Option models when their design is finalized:
+  // question Question @relation(fields: [question_id], references: [question_id], onDelete: Cascade)
+  // option   Option?  @relation(fields: [chosen_option], references: [option_id])
+
+  @@id([trial_id, question_id])
 }
