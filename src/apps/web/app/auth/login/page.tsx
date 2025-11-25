@@ -1,23 +1,13 @@
 'use client';
 
 import React, { useState } from 'react';
-// import { useRouter } from 'next/navigation';
-// import Link from 'next/link';
-// import Image from 'next/image';
-// import { signIn } from 'next-auth/react';
+import { useRouter } from 'next/navigation';
+import Link from 'next/link';
+import Image from 'next/image';
+import { signIn } from 'next-auth/react';
 import { useForm } from 'react-hook-form';
 import { z } from 'zod';
 import { zodResolver } from '@hookform/resolvers/zod';
-
-// --- MOCK ENVIRONMENT (Giữ nguyên để chạy Preview) ---
-const useRouter = () => ({ push: (path: string) => console.log('Navigate to:', path) });
-const signIn = async (type: string, data: any) => {
-  console.log('Simulating login:', data);
-  await new Promise(resolve => setTimeout(resolve, 1000));
-  return { error: null }; 
-};
-const Link = ({ href, children, className }: any) => <a href={href} className={className}>{children}</a>;
-// ----------------------------------------------------
 
 const schema = z.object({
   email: z.string().email({ message: 'Email không hợp lệ' }),

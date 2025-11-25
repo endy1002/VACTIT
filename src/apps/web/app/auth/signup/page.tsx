@@ -1,13 +1,8 @@
 'use client';
 
 import React, { useState } from 'react';
-// import Link from 'next/link';
-// import { useRouter } from 'next/navigation';
-
-// --- MOCK ENVIRONMENT (Cho Preview) ---
-const useRouter = () => ({ push: (path: string) => console.log('Navigate to:', path) });
-const Link = ({ href, children, className }: any) => <a href={href} className={className}>{children}</a>;
-// --------------------------------------
+import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 
 export default function SignupPage() {
   const router = useRouter();
