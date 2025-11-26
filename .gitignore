@@ -8,7 +8,7 @@
 /coverage
 
 # next.js
-/src/apps/web/.next/
+src/apps/web/.next/
 /out/
 
 # production
