@@ -63,3 +63,6 @@ logs
 .vscode/settings.json
 /src/generated/prisma
 
+# Next.js build output
+src/apps/web/.next/
+
