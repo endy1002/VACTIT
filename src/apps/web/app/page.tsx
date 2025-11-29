@@ -26,7 +26,7 @@ export default function HomePage() {
           <Link href="/ket-qua" className="sidebar__nav-item">
           Kết quả
           </Link>
-          
+
           <button className="sidebar__nav-item">Bảng xếp hạng</button>
           <button className="sidebar__nav-item">Giáo viên</button>
           <button className="sidebar__nav-item">Hướng dẫn thi</button>
@@ -73,6 +73,15 @@ export default function HomePage() {
           </div>
 
           <div className="topbar__profile">
+            <button className="topbar__notif">
+            <Image
+              src="/assets/logos/bell.png"
+              alt="Thông báo"
+              width={18}
+              height={18}
+            />
+            </button>
+
             <div className="topbar__avatar">
               <Image
                 src="/assets/logos/avatar.png"

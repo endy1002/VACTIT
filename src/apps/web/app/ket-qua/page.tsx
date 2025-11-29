@@ -198,18 +198,6 @@ export default function ResultsPage() {
           </div>
 
           <div className="topbar__profile">
-            <div className="topbar__avatar">
-              <Image
-                src="/assets/logos/avatar.png"
-                alt="Quang Thanh"
-                width={36}
-                height={36}
-              />
-            </div>
-            <div className="topbar__user">
-              <p className="topbar__user-name">Quang Thanh</p>
-              <p className="topbar__user-id">ID: 012345</p>
-            </div>
             <button className="topbar__notif">
               <Image
                 src="/assets/logos/bell.png"
@@ -218,6 +206,18 @@ export default function ResultsPage() {
                 height={18}
               />
             </button>
+            <div className="topbar__avatar">
+              <Image
+                src="/assets/logos/avatar.png"
+                alt="Quang Thanh"
+                width={36}
+                height={36}
+              />
+            </div>
+            <div className="topbar__profile-info">
+              <span className="topbar__profile-name">Quang Thanh</span>
+              <span className="topbar__profile-id">ID: 012345</span>
+            </div>
           </div>
         </header>
 
