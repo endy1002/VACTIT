@@ -1,4 +1,5 @@
 import Image from "next/image";
+import Link from "next/link";
 
 export default function HomePage() {
   return (
@@ -16,11 +17,16 @@ export default function HomePage() {
         </div>
 
         <nav className="sidebar__nav">
-          <button className="sidebar__nav-item sidebar__nav-item--active">
-            Tổng quan
-          </button>
+          <Link href="/" className="sidebar__nav-item sidebar__nav-item--active">
+          Tổng quan
+          </Link>
+
           <button className="sidebar__nav-item">Vào thi</button>
-          <button className="sidebar__nav-item">Kết quả</button>
+          
+          <Link href="/ket-qua" className="sidebar__nav-item">
+          Kết quả
+          </Link>
+          
           <button className="sidebar__nav-item">Bảng xếp hạng</button>
           <button className="sidebar__nav-item">Giáo viên</button>
           <button className="sidebar__nav-item">Hướng dẫn thi</button>
