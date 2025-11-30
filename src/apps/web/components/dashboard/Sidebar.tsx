@@ -1,25 +1,33 @@
+'use client'; // Required for usePathname
+
 import React from 'react';
-// Nếu cấu hình alias chưa chạy, bạn có thể dùng đường dẫn tương đối
-// import Image from 'next/image'; 
+import Link from 'next/link';
+import { usePathname } from 'next/navigation';
 
-interface SidebarProps {
-  activeTab: string;
-  setActiveTab: (tab: string) => void;
-}
-
+// We map IDs to specific URL paths here
 const MENU_ITEMS = [
-  { id: 'overview', label: 'Tổng quan' },
-  { id: 'exam', label: 'Vào thi' },
-  { id: 'result', label: 'Kết quả' },
-  { id: 'leaderboard', label: 'Bảng xếp hạng' },
-  { id: 'teachers', label: 'Giáo viên' },
-  { id: 'guide', label: 'Hướng dẫn thi' },
-  { id: 'faq', label: 'Câu hỏi thường gặp' },
-  { id: 'news', label: 'Tin tức mới nhất' },
-  { id: 'settings', label: 'Cài đặt' },
+  { id: 'overview', label: 'Tổng quan', path: '/' }, // Overview is the homepage
+  { id: 'exam', label: 'Vào thi', path: '/exam' },
+  { id: 'result', label: 'Kết quả', path: '/result' },
+  { id: 'leaderboard', label: 'Bảng xếp hạng', path: '/leaderboard' },
+  { id: 'teachers', label: 'Giáo viên', path: '/teachers' },
+  { id: 'guide', label: 'Hướng dẫn thi', path: '/guide' },
+  { id: 'faq', label: 'Câu hỏi thường gặp', path: '/faq' },
+  { id: 'news', label: 'Tin tức mới nhất', path: '/news' },
+  { id: 'settings', label: 'Cài đặt', path: '/settings' },
 ];
 
-export default function Sidebar({ activeTab, setActiveTab }: SidebarProps) {
+export default function Sidebar() {
+  const pathname = usePathname(); // Get the current URL (e.g., "/exam")
+
+  // Function to check if a menu item is active
+  const isActive = (path: string) => {
+    // If it's the home page, strictly check for "/"
+    if (path === '/') return pathname === '/';
+    // For other pages, check if the URL starts with the path (e.g., /exam/123 is still active)
+    return pathname.startsWith(path);
+  };
+
   return (
     <aside className="sidebar">
       <div className="sidebar__logo">
@@ -35,15 +43,15 @@ export default function Sidebar({ activeTab, setActiveTab }: SidebarProps) {
 
       <nav className="sidebar__nav">
         {MENU_ITEMS.map((item) => (
-          <button
+          <Link
             key={item.id}
-            onClick={() => setActiveTab(item.id)}
+            href={item.path}
             className={`sidebar__nav-item ${
-              activeTab === item.id ? 'sidebar__nav-item--active' : ''
+              isActive(item.path) ? 'sidebar__nav-item--active' : ''
             }`}
           >
             {item.label}
-          </button>
+          </Link>
         ))}
       </nav>
 

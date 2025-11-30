@@ -1,3 +1,5 @@
+'use client';
+
 import React, { useState } from 'react';
 // Import dữ liệu từ file cùng thư mục (sibling)
 import { MOCK_EXAMS } from '../../../mockData/mockExam';
