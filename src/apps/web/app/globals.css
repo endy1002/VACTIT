@@ -267,6 +267,81 @@ button {
   background: #eef2ff;
 }
 
+/* Upload button style (blue primary) */
+.btn--upload {
+  background: var(--color-primary);
+  color: #ffffff;
+  box-shadow: 0 6px 18px rgba(51, 102, 255, 0.12);
+  transition: transform 0.12s ease, box-shadow 0.12s ease, filter 0.12s ease;
+}
+
+.btn--upload:hover {
+  transform: translateY(-3px);
+  box-shadow: 0 14px 36px rgba(51, 102, 255, 0.18);
+  filter: brightness(1.02);
+}
+
+/* Make headings and controls use the same base font + weights for visual consistency */
+h1, h2, h3, h4, h5 {
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  font-weight: 700;
+  color: var(--color-text-main);
+}
+
+input, textarea, select, button {
+  font-family: var(--font-sans);
+}
+
+/* Modal/dialog tweaks */
+.modal-dialog {
+  width: 760px;
+  max-width: calc(100% - 48px);
+  border-radius: 12px;
+  padding: 20px;
+}
+
+.modal-row {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+}
+
+.field-inline {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+/* Make date/time inputs behave consistently */
+input[type="date"], input[type="time"], input[type="number"] {
+  -webkit-appearance: none;
+  appearance: none;
+}
+
+/* ensure inputs don't overflow inside small containers */
+.no-overflow {
+  min-width: 0;
+}
+
+/* specific sizes for date/time inputs inside modal */
+.date-input {
+  width: 180px;
+}
+
+.time-input {
+  width: 120px;
+}
+
+/* Small hint below date inputs to indicate desired format (native control still used) */
+/* Slightly reduce input font-size for consistency in modal */
+.modal-dialog input,
+.modal-dialog textarea,
+.modal-dialog select {
+  font-size: 14px;
+}
+
 .link-button {
   border: none;
   outline: none;
