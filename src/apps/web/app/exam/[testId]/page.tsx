@@ -77,11 +77,6 @@ export default function ExamPage(props: {
 
   return (
     <div className="min-h-screen flex">
-      <Sidebar activeTab={activeTab} setActiveTab={setActiveTab} />
-
-      <div className="main bg-gray-50 min-h-screen">
-        <Topbar />
-
         <main className="flex-1 p-6 overflow-auto">
           <div className="bg-white rounded-lg shadow p-6">
             <Controls
@@ -110,7 +105,6 @@ export default function ExamPage(props: {
             </div>
           </div>
         </main>
-      </div>
     </div>
   );
 }

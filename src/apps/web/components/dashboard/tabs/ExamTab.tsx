@@ -1,5 +1,8 @@
+'use client';
+
 import React, { useState } from 'react';
 // Import dữ liệu từ file cùng thư mục (sibling)
+import Link from 'next/link';
 import { MOCK_EXAMS } from '../../../mockData/mockExam';
 
 export default function ExamTab() {
@@ -115,7 +118,9 @@ export default function ExamTab() {
                   Chi tiết
                 </button>
                 <button className="flex-1 py-2 bg-blue-600 text-white text-xs font-medium rounded-lg hover:bg-blue-700 transition-all shadow-sm shadow-blue-200 hover:shadow-blue-300 transform active:scale-95">
+                  <Link href={`/exam/123`}> {/* chagne 123 with test.id when appyling dynamic routes */}
                   Thi ngay
+                  </Link>
                 </button>
               </div>
             </div>
@@ -193,7 +198,9 @@ export default function ExamTab() {
               {/* Action Buttons */}
               <div className="space-y-3 mt-auto">
                  <button className="w-full bg-[#2563EB] text-white py-4 rounded-full font-bold text-lg shadow-lg hover:bg-blue-700 transition-all hover:shadow-blue-300">
+                    <Link href={`/exam/123`}> {/* chagne 123 with test.id when appyling dynamic routes */}
                     Vào thi ngay
+                    </Link>
                  </button>
                  <button 
                     onClick={() => setSelectedExam(null)}
