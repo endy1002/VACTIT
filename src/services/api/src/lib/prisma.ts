@@ -1,11 +1,10 @@
 import { PrismaClient } from '@prisma/client';
 
 /**
- * Resilient Prisma Client with auto-reconnect capability.
- * 
- * - Implements keepalive pings to prevent idle connection drops (Supabase free tier)
- * - Singleton pattern to avoid creating multiple instances / connection pool exhaustion
- * - Auto-reconnect via keepalive on ping failure
+ * Resilient Prisma Client with:
+ * - Singleton pattern (avoid connection pool exhaustion)
+ * - KeepAlive pings (prevent Supabase idle disconnect)
+ * - Auto-reconnect with exponential backoff retry
  */
 
 let prisma: PrismaClient;
@@ -36,9 +35,39 @@ export function getPrismaClient(): PrismaClient {
 }
 
 /**
+ * Attempt to reconnect with exponential backoff.
+ * Retries up to `maxRetries` times with increasing delay.
+ * 
+ * Delay pattern: 2s → 4s → 8s → 16s → 32s (total ~62s coverage)
+ */
+async function reconnectWithRetry(maxRetries = 5): Promise<boolean> {
+    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+        const delay = Math.min(2000 * Math.pow(2, attempt - 1), 30000); // 2s, 4s, 8s, 16s, 30s
+
+        try {
+            await prisma.$disconnect();
+            await prisma.$connect();
+            await prisma.$queryRaw`SELECT 1`;
+            console.log(`[Prisma] ✅ Reconnected on attempt ${attempt}/${maxRetries}`);
+            return true;
+        } catch (error: any) {
+            console.warn(`[Prisma] Reconnect attempt ${attempt}/${maxRetries} failed: ${error.message}`);
+
+            if (attempt < maxRetries) {
+                console.log(`[Prisma] Waiting ${delay / 1000}s before next attempt...`);
+                await new Promise(resolve => setTimeout(resolve, delay));
+            }
+        }
+    }
+
+    console.error(`[Prisma] ❌ All ${maxRetries} reconnect attempts failed`);
+    return false;
+}
+
+/**
  * Start keepalive pings to prevent Supabase from dropping idle connections.
  * Pings every 4 minutes (Supabase free tier timeout is ~5 min).
- * Also attempts auto-reconnect on failure.
+ * On failure, retries with exponential backoff.
  */
 export function startKeepAlive(intervalMs = 4 * 60 * 1000) {
     if (keepAliveInterval) {
@@ -48,16 +77,11 @@ export function startKeepAlive(intervalMs = 4 * 60 * 1000) {
     keepAliveInterval = setInterval(async () => {
         try {
             await prisma.$queryRaw`SELECT 1`;
-            // Silently succeed - no need to log every ping
+            // Silently succeed
         } catch (error: any) {
-            console.warn('[Prisma KeepAlive] Ping failed, attempting reconnect:', error.message);
-            try {
-                await prisma.$disconnect();
-                await prisma.$connect();
-                console.log('[Prisma KeepAlive] ✅ Reconnected after failed ping');
-            } catch (reconnectError: any) {
-                console.error('[Prisma KeepAlive] ❌ Reconnect failed:', reconnectError.message);
-            }
+            console.warn('[Prisma KeepAlive] Ping failed:', error.message);
+            console.log('[Prisma KeepAlive] Starting reconnect with retry...');
+            await reconnectWithRetry(5);
         }
     }, intervalMs);
 
@@ -85,3 +109,8 @@ export async function disconnectPrisma() {
         console.log('[Prisma] Disconnected');
     }
 }
+
+/**
+ * Exported for use in health check endpoint
+ */
+export { reconnectWithRetry };

@@ -1,5 +1,5 @@
 import { fastify } from 'fastify';
-import { getPrismaClient } from './lib/prisma';
+import { getPrismaClient, reconnectWithRetry } from './lib/prisma';
 import { Queue } from 'bullmq';
 import IORedis from 'ioredis';
 import { authRoutes } from './routes/auth.routes';
@@ -128,23 +128,19 @@ server.get('/health', async (request, reply) => {
     uptime: process.uptime(),
   };
 
-  // Test database (with reconnect attempt on failure)
+  // Test database (with retry reconnect on failure)
   try {
     await prisma.$queryRaw`SELECT 1`;
     health.database = 'connected';
   } catch (error: any) {
-    console.error('Database health check failed, attempting reconnect:', error.message);
-    try {
-      await prisma.$disconnect();
-      await prisma.$connect();
-      await prisma.$queryRaw`SELECT 1`;
+    console.error('Database health check failed, attempting reconnect with retry:', error.message);
+    const reconnected = await reconnectWithRetry(3); // 3 retries for health check (faster)
+    if (reconnected) {
       health.database = 'reconnected';
-      console.log('Database reconnected successfully via health check');
-    } catch (reconnectError: any) {
+    } else {
       health.status = 'degraded';
       health.database = 'disconnected';
-      health.databaseError = reconnectError.message;
-      console.error('Database reconnect failed:', reconnectError.message);
+      health.databaseError = error.message;
     }
   }
 
