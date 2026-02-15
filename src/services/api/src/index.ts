@@ -1,6 +1,7 @@
 import "dotenv/config";
 import server from './server';
 import { startIRTScheduler, stopIRTScheduler } from './jobs/irt-scheduler';
+import { startKeepAlive, stopKeepAlive, disconnectPrisma } from './lib/prisma';
 
 const PORT = process.env.PORT ? parseInt(process.env.PORT, 10) : 3001;
 const HOST = process.env.HOST || '0.0.0.0';
@@ -17,6 +18,9 @@ const start = async () => {
     console.log(`API server running on http://${HOST}:${PORT}`);
     console.log(`Health check: http://${HOST}:${PORT}/health`);
 
+    // Start database keepalive pings (every 4 min to prevent Supabase idle disconnect)
+    startKeepAlive();
+
     // Start IRT scheduler for automatic exam grading (pass shared Prisma & Redis)
     startIRTScheduler(server.prisma, server.redis);
   } catch (err) {
@@ -28,13 +32,17 @@ const start = async () => {
 // Graceful shutdown handler
 process.on('SIGINT', async () => {
   console.log('\n🛑 Shutting down gracefully...');
+  stopKeepAlive();
   await stopIRTScheduler();
+  await disconnectPrisma();
   process.exit(0);
 });
 
 process.on('SIGTERM', async () => {
   console.log('\n🛑 Shutting down gracefully...');
+  stopKeepAlive();
   await stopIRTScheduler();
+  await disconnectPrisma();
   process.exit(0);
 });
 

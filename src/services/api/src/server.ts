@@ -1,5 +1,5 @@
 import { fastify } from 'fastify';
-import { PrismaClient } from '@prisma/client';
+import { getPrismaClient } from './lib/prisma';
 import { Queue } from 'bullmq';
 import IORedis from 'ioredis';
 import { authRoutes } from './routes/auth.routes';
@@ -14,15 +14,8 @@ import { notificationRoutes } from './routes/notification.routes';
 import { overviewRoutes } from './routes/overview.routes';
 import { logger, logRequest } from './utils/logger';
 
-// Initialize Prisma
-const prisma = new PrismaClient({
-  log: process.env.NODE_ENV === 'development' ? ['query', 'error', 'warn'] : ['error'],
-  datasources: {
-    db: {
-      url: process.env.DATABASE_URL,
-    },
-  },
-});
+// Initialize Prisma (resilient singleton with auto-reconnect)
+const prisma = getPrismaClient();
 
 // Initialize Fastify server
 const server = fastify({
@@ -135,15 +128,24 @@ server.get('/health', async (request, reply) => {
     uptime: process.uptime(),
   };
 
-  // Test database 
+  // Test database (with reconnect attempt on failure)
   try {
-    await prisma.user.findFirst();
+    await prisma.$queryRaw`SELECT 1`;
     health.database = 'connected';
   } catch (error: any) {
-    health.status = 'degraded';
-    health.database = 'disconnected';
-    health.databaseError = error.message;
-    console.error('Database health check failed:', error.message);
+    console.error('Database health check failed, attempting reconnect:', error.message);
+    try {
+      await prisma.$disconnect();
+      await prisma.$connect();
+      await prisma.$queryRaw`SELECT 1`;
+      health.database = 'reconnected';
+      console.log('Database reconnected successfully via health check');
+    } catch (reconnectError: any) {
+      health.status = 'degraded';
+      health.database = 'disconnected';
+      health.databaseError = reconnectError.message;
+      console.error('Database reconnect failed:', reconnectError.message);
+    }
   }
 
   // Test Redis (if available)
@@ -331,6 +333,7 @@ process.on('SIGINT', () => closeGracefully('SIGINT'));
 process.on('SIGTERM', () => closeGracefully('SIGTERM'));
 
 // Type augmentation for Fastify
+import { PrismaClient } from '@prisma/client';
 declare module 'fastify' {
   interface FastifyInstance {
     prisma: PrismaClient;

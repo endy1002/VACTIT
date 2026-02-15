@@ -1,10 +1,10 @@
 import { Worker, Job } from 'bullmq';
 import IORedis from 'ioredis';
-import { PrismaClient } from '@prisma/client';
+import { getPrismaClient } from './lib/prisma';
 import axios from 'axios';
 import { logIRT, logError, logPerformance } from './utils/logger';
 
-const prisma = new PrismaClient();
+const prisma = getPrismaClient();
 
 const redisConnection = new IORedis(process.env.REDIS_URL || 'redis://localhost:6379', {
     maxRetriesPerRequest: null,
@@ -21,9 +21,9 @@ const irtWorker = new Worker(
     async (job: Job<IRTJobData>) => {
         const startTime = Date.now();
         const { testId } = job.data;
-        
-        logIRT(job.id!, 'processing', testId, undefined, { 
-            attemptNumber: job.attemptsMade 
+
+        logIRT(job.id!, 'processing', testId, undefined, {
+            attemptNumber: job.attemptsMade
         });
 
         try {
@@ -155,15 +155,15 @@ const irtWorker = new Worker(
             // await prisma.test.update({ where: { test_id: testId }, data: { status: 'PROCESSED' } });
 
             await job.updateProgress(100);
-            
+
             const duration = Date.now() - startTime;
             logIRT(job.id!, 'completed', testId, duration, {
                 trialsProcessed: studentsScores.length,
                 totalQuestions: questions.length
             });
-            logPerformance('irt_processing', duration, 30000, { 
+            logPerformance('irt_processing', duration, 30000, {
                 testId,
-                trialsCount: studentsScores.length 
+                trialsCount: studentsScores.length
             });
 
             return { success: true, processed: studentsScores.length };
@@ -174,12 +174,12 @@ const irtWorker = new Worker(
                 error: error.message,
                 attemptNumber: job.attemptsMade
             });
-            logError(error, { 
+            logError(error, {
                 context: 'irt_processing',
                 testId,
-                jobId: job.id 
+                jobId: job.id
             });
-            
+
             if (error.response) {
                 console.error('IRT Service Response:', error.response.data);
             }
