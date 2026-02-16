@@ -53,6 +53,41 @@ export function startIRTScheduler(prisma: PrismaClient, redisClient?: IORedis) {
         throw new Error('Prisma instance not initialized');
       }
 
+      // DEBUG: Check each condition separately to find what's failing
+      const allExams = await prismaInstance.test.findMany({
+        where: { type: 'exam' },
+        select: { test_id: true, title: true, type: true, due_time: true, _count: { select: { trials: true } } },
+      });
+      console.log('[Scheduler DEBUG] All exams:', allExams.map(e => ({
+        id: e.test_id, title: e.title, type: e.type, due_time: e.due_time, trialsCount: e._count.trials
+      })));
+
+      const pastDueExams = await prismaInstance.test.findMany({
+        where: { type: 'exam', due_time: { lte: now } },
+        select: { test_id: true, title: true, due_time: true },
+      });
+      console.log('[Scheduler DEBUG] Exams past due_time:', pastDueExams);
+
+      // Check trials with null processed_score for those exams
+      if (pastDueExams.length > 0) {
+        for (const exam of pastDueExams) {
+          const trialsWithNullScore = await prismaInstance.trial.findMany({
+            where: { test_id: exam.test_id, processed_score: { equals: Prisma.AnyNull } },
+            select: { trial_id: true, processed_score: true },
+          });
+          console.log(`[Scheduler DEBUG] Exam ${exam.test_id}: ${trialsWithNullScore.length} trials with null processed_score`);
+
+          // Also check what processed_score actually looks like
+          const allTrials = await prismaInstance.trial.findMany({
+            where: { test_id: exam.test_id },
+            select: { trial_id: true, processed_score: true },
+          });
+          console.log(`[Scheduler DEBUG] Exam ${exam.test_id}: ALL trials processed_score values:`,
+            allTrials.map(t => ({ id: t.trial_id, score: t.processed_score }))
+          );
+        }
+      }
+
       // Find exams: type='exam', due_time passed, has unprocessed trials
       const examsNeedingIRT = await prismaInstance.test.findMany({
         where: {
