@@ -1,5 +1,7 @@
 import { PrismaClient, Prisma } from '@prisma/client';
 import { logExternalApi, logPerformance, logError } from '../utils/logger';
+import { createNotification } from '../routes/notification.routes';
+import IORedis from 'ioredis';
 
 /**
  * Process IRT calculation for a single exam directly (no BullMQ).
@@ -12,7 +14,8 @@ import { logExternalApi, logPerformance, logError } from '../utils/logger';
  */
 export async function processIRTForExam(
     prisma: PrismaClient,
-    testId: string
+    testId: string,
+    redis?: IORedis | null
 ): Promise<{ success: boolean; processed: number; message?: string }> {
     const startTime = Date.now();
 
@@ -128,6 +131,27 @@ export async function processIRTForExam(
 
         await Promise.all(updatePromises);
 
+        // 6. Notify each student that their score is ready
+        const testInfo = await prisma.test.findUnique({
+            where: { test_id: testId },
+            select: { title: true },
+        });
+        const testTitle = testInfo?.title || testId;
+
+        // Get unique student IDs from trials
+        const studentIds = [...new Set(trials.map(t => t.student_id))];
+        console.log(`[IRT Processor] Sending score notifications to ${studentIds.length} students...`);
+
+        for (const studentId of studentIds) {
+            await createNotification(prisma, redis || null, {
+                title: `📊 Kết quả ${testTitle} đã có!`,
+                message: `Điểm IRT cho đề thi "${testTitle}" đã được xử lý. Xem kết quả ngay!`,
+                type: 'score',
+                link: '/result',
+                userId: studentId,
+            });
+        }
+
         const totalDuration = Date.now() - startTime;
         logPerformance('irt_direct_processing', totalDuration, 30000, {
             testId,
@@ -135,7 +159,7 @@ export async function processIRTForExam(
             questionsCount: questions.length,
         });
 
-        console.log(`✅ [IRT Processor] Completed for test ${testId}: ${studentsScores.length} trials processed in ${totalDuration}ms`);
+        console.log(`✅ [IRT Processor] Completed for test ${testId}: ${studentsScores.length} trials processed, ${studentIds.length} notifications sent in ${totalDuration}ms`);
 
         return { success: true, processed: studentsScores.length };
 

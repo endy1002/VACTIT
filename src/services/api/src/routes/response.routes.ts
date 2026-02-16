@@ -2,6 +2,7 @@ import { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import { createClient } from '@supabase/supabase-js';
 import { logExam, logError, logPerformance } from '../utils/logger';
+import { createNotification } from './notification.routes';
 
 const createResponsesSchema = z.object({
   trialId: z.string().min(1),
@@ -54,7 +55,7 @@ export async function responseRoutes(server: FastifyInstance) {
       }
 
       const { trialId, responses } = parsed.data;
-      
+
       // ensure trial exists
       const trial = await server.prisma.trial.findUnique({
         where: { trial_id: trialId },
@@ -65,9 +66,9 @@ export async function responseRoutes(server: FastifyInstance) {
         return { error: 'trial_not_found' };
       }
 
-      logExam('submit', trial.test_id, trial.student_id, { 
+      logExam('submit', trial.test_id, trial.student_id, {
         trialId,
-        responseCount: responses.length 
+        responseCount: responses.length
       });
 
       // prepare rows
@@ -148,18 +149,34 @@ export async function responseRoutes(server: FastifyInstance) {
       ]);
 
       const duration = Date.now() - startTime;
-      logPerformance('submit_exam', duration, 1000, { 
+      logPerformance('submit_exam', duration, 1000, {
         trialId,
         totalScore,
         responseCount: rows.length
       });
 
+      // Send notification for practice tests (exam notifications sent after IRT)
+      const testInfo = await server.prisma.test.findUnique({
+        where: { test_id: trial.test_id },
+        select: { type: true, title: true },
+      });
+
+      if (testInfo?.type === 'practice') {
+        await createNotification(server.prisma, server.redis || null, {
+          title: `📝 Kết quả ${testInfo.title}`,
+          message: `Bạn đạt ${totalScore}/${totalQuestions} điểm. Xem chi tiết ngay!`,
+          type: 'score',
+          link: '/result',
+          userId: trial.student_id,
+        });
+      }
+
       reply.status(201);
       return { data: { count: rows.length, scores: tacticData, total: totalScore } };
     } catch (error) {
-      logError(error as Error, { 
+      logError(error as Error, {
         context: 'submit_exam',
-        trialId: (request.body as any)?.trialId 
+        trialId: (request.body as any)?.trialId
       });
       reply.status(500);
       return {

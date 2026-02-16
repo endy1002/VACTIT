@@ -117,7 +117,7 @@ export function startIRTScheduler(prisma: PrismaClient, redisClient?: IORedis) {
         console.log(`🚀 Processing IRT for exam: ${exam.test_id} (${exam.title}) - ${exam.trials.length} trial(s) pending`);
 
         // Fire and don't block the scheduler loop — let it finish so lock is released
-        processIRTForExam(prismaInstance!, exam.test_id)
+        processIRTForExam(prismaInstance!, exam.test_id, redis)
           .then(result => {
             console.log(`✅ IRT completed for exam: ${exam.test_id} - ${result.processed} trial(s) processed`);
           })
