@@ -62,14 +62,14 @@ export function startIRTScheduler(prisma: PrismaClient, redisClient?: IORedis) {
           },
           trials: {
             some: {
-              processed_score: { equals: Prisma.JsonNull },
+              processed_score: { equals: Prisma.AnyNull },
             },
           },
         },
         include: {
           trials: {
             where: {
-              processed_score: { equals: Prisma.JsonNull },
+              processed_score: { equals: Prisma.AnyNull },
             },
             select: {
               trial_id: true,
