@@ -7,10 +7,14 @@ import { processIRTForExam } from './irt-processor';
 let redis: IORedis | null = null;
 let prismaInstance: PrismaClient | null = null;
 
+// In-memory guard: tracks exam IDs currently being processed
+// Prevents redundant re-triggers when processing takes longer than 1 minute
+const processingExams = new Set<string>();
+
 /**
  * Scheduled job to check for exams that reached due_time and trigger IRT calculation.
  * Runs every minute. Uses Redis lock if available to prevent duplicate triggers.
- * Calls R Service directly (no BullMQ worker needed).
+ * Uses in-memory Set to skip exams already being processed.
  *
  * @param prisma - Shared Prisma client instance from server
  * @param redisClient - Optional shared Redis client for distributed locking
@@ -37,7 +41,6 @@ export function startIRTScheduler(prisma: PrismaClient, redisClient?: IORedis) {
           }
           console.log('🔒 Acquired scheduler lock, checking for exams...');
         } catch (redisErr) {
-          // Redis unavailable — proceed without lock (single instance assumed)
           console.warn('[Scheduler] Redis lock unavailable, proceeding without lock');
         }
       }
@@ -51,47 +54,6 @@ export function startIRTScheduler(prisma: PrismaClient, redisClient?: IORedis) {
 
       if (!prismaInstance) {
         throw new Error('Prisma instance not initialized');
-      }
-
-      // DEBUG: Check each condition separately to find what's failing
-      const allExams = await prismaInstance.test.findMany({
-        where: { type: 'exam' },
-        select: { test_id: true, title: true, type: true, due_time: true, _count: { select: { trials: true } } },
-      });
-      console.log('[Scheduler DEBUG] All exams:', allExams.map(e => ({
-        id: e.test_id, title: e.title, type: e.type, due_time: e.due_time, trialsCount: e._count.trials
-      })));
-
-      const pastDueExams = await prismaInstance.test.findMany({
-        where: { type: 'exam', due_time: { lte: now } },
-        select: { test_id: true, title: true, due_time: true },
-      });
-      console.log('[Scheduler DEBUG] Exams past due_time:', pastDueExams);
-
-      // Check trials with null processed_score for those exams
-      if (pastDueExams.length > 0) {
-        for (const exam of pastDueExams) {
-          const trialsWithNullScore = await prismaInstance.trial.findMany({
-            where: {
-              test_id: exam.test_id,
-              OR: [
-                { processed_score: { equals: Prisma.AnyNull } },
-                { processed_score: { equals: {} } },
-              ],
-            },
-            select: { trial_id: true, processed_score: true },
-          });
-          console.log(`[Scheduler DEBUG] Exam ${exam.test_id}: ${trialsWithNullScore.length} trials needing IRT (null or {})`);
-
-          // Also check what processed_score actually looks like
-          const allTrials = await prismaInstance.trial.findMany({
-            where: { test_id: exam.test_id },
-            select: { trial_id: true, processed_score: true },
-          });
-          console.log(`[Scheduler DEBUG] Exam ${exam.test_id}: ALL trials processed_score values:`,
-            allTrials.map(t => ({ id: t.trial_id, score: t.processed_score }))
-          );
-        }
       }
 
       // Find exams: type='exam', due_time passed, has unprocessed trials
@@ -128,6 +90,9 @@ export function startIRTScheduler(prisma: PrismaClient, redisClient?: IORedis) {
 
       if (examsNeedingIRT.length === 0) {
         console.log('[Scheduler] No exams need IRT calculation at this time');
+        if (processingExams.size > 0) {
+          console.log(`[Scheduler] (${processingExams.size} exam(s) still processing: ${[...processingExams].join(', ')})`);
+        }
         return;
       }
 
@@ -140,22 +105,32 @@ export function startIRTScheduler(prisma: PrismaClient, redisClient?: IORedis) {
         }))
       );
 
-      // Process each exam sequentially (direct call, no queue)
+      // Process each exam — skip if already being processed
       for (const exam of examsNeedingIRT) {
-        try {
-          console.log(`🚀 Processing IRT for exam: ${exam.test_id} (${exam.title}) - ${exam.trials.length} trial(s) pending`);
-
-          const result = await processIRTForExam(prismaInstance, exam.test_id);
-
-          console.log(`✅ IRT completed for exam: ${exam.test_id} - ${result.processed} trial(s) processed`);
-        } catch (examError: any) {
-          // Log error but continue with next exam
-          console.error(`❌ IRT failed for exam ${exam.test_id}:`, examError.message);
-          logError(examError, {
-            context: 'irt_scheduler_exam',
-            testId: exam.test_id,
-          });
+        if (processingExams.has(exam.test_id)) {
+          console.log(`⏳ Skipping exam ${exam.test_id} (${exam.title}) — already processing`);
+          continue;
         }
+
+        // Mark as processing BEFORE starting (non-blocking: fire and forget)
+        processingExams.add(exam.test_id);
+        console.log(`🚀 Processing IRT for exam: ${exam.test_id} (${exam.title}) - ${exam.trials.length} trial(s) pending`);
+
+        // Fire and don't block the scheduler loop — let it finish so lock is released
+        processIRTForExam(prismaInstance!, exam.test_id)
+          .then(result => {
+            console.log(`✅ IRT completed for exam: ${exam.test_id} - ${result.processed} trial(s) processed`);
+          })
+          .catch(examError => {
+            console.error(`❌ IRT failed for exam ${exam.test_id}:`, examError.message);
+            logError(examError, {
+              context: 'irt_scheduler_exam',
+              testId: exam.test_id,
+            });
+          })
+          .finally(() => {
+            processingExams.delete(exam.test_id);
+          });
       }
 
     } catch (error) {
@@ -182,6 +157,5 @@ export function startIRTScheduler(prisma: PrismaClient, redisClient?: IORedis) {
  * Graceful shutdown handler
  */
 export async function stopIRTScheduler() {
-  // Redis is shared from server — don't disconnect here
   console.log('⏹  IRT scheduler stopped');
 }

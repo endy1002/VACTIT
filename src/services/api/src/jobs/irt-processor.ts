@@ -86,7 +86,7 @@ export async function processIRTForExam(
         console.log(`[IRT Processor] Using API Key: ${irtApiKey ? 'YES (' + irtApiKey.substring(0, 3) + '...)' : 'NO'}`);
 
         const fetchStartTime = Date.now();
-        console.log(`[IRT Processor] Calling R service (timeout: 120s)...`);
+        console.log(`[IRT Processor] Calling R service...`);
 
         const response = await fetch(`${irtApiUrl}/calculate-irt`, {
             method: 'POST',
@@ -95,7 +95,6 @@ export async function processIRTForExam(
                 ...(irtApiKey ? { 'Authorization': `Bearer ${irtApiKey}` } : {}),
             },
             body: JSON.stringify(payload),
-            signal: AbortSignal.timeout(120_000), // 120s timeout (R service cold start can take 30-60s)
         });
 
         const fetchDuration = Date.now() - fetchStartTime;
