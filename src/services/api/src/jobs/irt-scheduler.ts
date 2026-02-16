@@ -72,10 +72,16 @@ export function startIRTScheduler(prisma: PrismaClient, redisClient?: IORedis) {
       if (pastDueExams.length > 0) {
         for (const exam of pastDueExams) {
           const trialsWithNullScore = await prismaInstance.trial.findMany({
-            where: { test_id: exam.test_id, processed_score: { equals: Prisma.AnyNull } },
+            where: {
+              test_id: exam.test_id,
+              OR: [
+                { processed_score: { equals: Prisma.AnyNull } },
+                { processed_score: { equals: {} } },
+              ],
+            },
             select: { trial_id: true, processed_score: true },
           });
-          console.log(`[Scheduler DEBUG] Exam ${exam.test_id}: ${trialsWithNullScore.length} trials with null processed_score`);
+          console.log(`[Scheduler DEBUG] Exam ${exam.test_id}: ${trialsWithNullScore.length} trials needing IRT (null or {})`);
 
           // Also check what processed_score actually looks like
           const allTrials = await prismaInstance.trial.findMany({
@@ -89,6 +95,7 @@ export function startIRTScheduler(prisma: PrismaClient, redisClient?: IORedis) {
       }
 
       // Find exams: type='exam', due_time passed, has unprocessed trials
+      // processed_score can be: null (DbNull), JSON null, or {} (empty object)
       const examsNeedingIRT = await prismaInstance.test.findMany({
         where: {
           type: 'exam',
@@ -97,14 +104,20 @@ export function startIRTScheduler(prisma: PrismaClient, redisClient?: IORedis) {
           },
           trials: {
             some: {
-              processed_score: { equals: Prisma.AnyNull },
+              OR: [
+                { processed_score: { equals: Prisma.AnyNull } },
+                { processed_score: { equals: {} } },
+              ],
             },
           },
         },
         include: {
           trials: {
             where: {
-              processed_score: { equals: Prisma.AnyNull },
+              OR: [
+                { processed_score: { equals: Prisma.AnyNull } },
+                { processed_score: { equals: {} } },
+              ],
             },
             select: {
               trial_id: true,
