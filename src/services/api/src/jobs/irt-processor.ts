@@ -22,10 +22,20 @@ export async function processIRTForExam(
     console.log(`[IRT Processor] Starting IRT calculation for test: ${testId}`);
 
     try {
-        // 1. Fetch Questions (ordered by question_id)
-        const questions = await prisma.question.findMany({
+        // 1. Fetch Questions
+        // question_id format: "{testId}_{index}" where index is 1-based integer.
+        // IMPORTANT: Must sort NUMERICALLY by the index suffix, NOT by string.
+        // String sort of "_1","_10","_100"... completely scrambles section assignment.
+        const questionsUnsorted = await prisma.question.findMany({
             where: { test_id: testId },
-            orderBy: { question_id: 'asc' },
+        });
+
+        const questions = questionsUnsorted.sort((a, b) => {
+            const getIndex = (id: string) => {
+                const parts = id.split('_');
+                return Number(parts[parts.length - 1]) || 0;
+            };
+            return getIndex(a.question_id) - getIndex(b.question_id);
         });
 
         if (questions.length === 0) {

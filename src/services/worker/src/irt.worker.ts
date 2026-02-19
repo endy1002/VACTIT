@@ -30,13 +30,20 @@ const irtWorker = new Worker(
             await job.updateProgress(10);
 
             // 1. Fetch Questions (to know correct answers and order)
-            // Assuming questions are ordered by some index or we sort them by question_id
-            // The previous code implied question_id structure like "testId_index".
-            // We need a reliable order. Sorting by question_id string might work if padded, 
-            // but let's assume we sort by question_id for now as implied by the R script expecting 120 cols.
-            const questions = await prisma.question.findMany({
+            // question_id format: "{testId}_{index}" where index is 1-based integer.
+            // IMPORTANT: Must sort NUMERICALLY by the index suffix, NOT by string.
+            // String sort of "_1","_10","_100"... scrambles the order completely.
+            const questionsUnsorted = await prisma.question.findMany({
                 where: { test_id: testId },
-                orderBy: { question_id: 'asc' },
+            });
+
+            // Sort by numeric index extracted from question_id
+            const questions = questionsUnsorted.sort((a, b) => {
+                const getIndex = (id: string) => {
+                    const parts = id.split('_');
+                    return Number(parts[parts.length - 1]) || 0;
+                };
+                return getIndex(a.question_id) - getIndex(b.question_id);
             });
 
             if (questions.length === 0) {

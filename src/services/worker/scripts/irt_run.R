@@ -109,14 +109,27 @@ process_responses <- function(data){
 
     fs <- mirt::fscores(fit, method = 'EAP', full.scores.SE = TRUE)
     theta <- as.numeric(fs[,1]); se <- as.numeric(fs[,2])
-    raw_score <- rowSums(data_use, na.rm = TRUE)
 
-    # Use fixed theta bounds for scaling to avoid extremes from small samples or unstable item fits.
-    # Map a reasonable theta range (e.g. -4..+4) to 0..300 and clamp values.
-    theta_lower <- -4
-    theta_upper <- 4
-    theta_clamped <- pmin(pmax(theta, theta_lower), theta_upper)
-    score_0_300 <- 300 * (theta_clamped - theta_lower) / (theta_upper - theta_lower)
+    # FIX: raw_score must count ALL items in the section (data_items), not just
+    # the filtered subset (data_use) which excludes non-varying items.
+    raw_score <- rowSums(data_items, na.rm = TRUE)
+
+    # FIX: Use TCC-based scoring instead of arbitrary [-4,4] linear mapping.
+    # For each theta, compute the expected proportion correct using the 2PL ICC:
+    #   P(x=1 | theta, a, b) = 1 / (1 + exp(-a*(theta - b)))
+    # Then scale expected proportion to 0–300.
+    # This ensures: 0 correct → score ≈ 0, all correct → score ≈ 300.
+    n_section_items <- length(sel)  # always 30 (the full section)
+    a_vec <- item_params$a
+    b_vec <- item_params$b
+
+    score_0_300 <- sapply(theta, function(t) {
+      probs <- 1 / (1 + exp(-a_vec * (t - b_vec)))
+      expected_correct <- sum(probs)
+      # Scale: expected_correct out of n fitted items → proportion → 0-300
+      300 * expected_correct / length(a_vec)
+    })
+    score_0_300 <- pmin(pmax(score_0_300, 0), 300)
     score_0_300[is.na(score_0_300)] <- NA_real_
 
     student_scores <- tibble::tibble(name = df$name)
