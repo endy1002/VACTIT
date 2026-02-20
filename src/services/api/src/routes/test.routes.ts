@@ -236,6 +236,29 @@ export async function testRoutes(server: FastifyInstance) {
     }
   });
 
+  // Trigger IRT Calculation (Dry-Run mode without saving to DB)
+  server.post<{ Params: { id: string } }>('/api/tests/:id/calculate-irt-dryrun', async (request, reply) => {
+    try {
+      const { id } = request.params;
+      const { processIRTForExam } = await import('../jobs/irt-processor');
+
+      console.log(`[API] Manual IRT trigger (DRY-RUN) for test: ${id}`);
+      const result = await processIRTForExam(server.prisma, id, server.redis, { dryRun: true });
+
+      return {
+        message: 'IRT dry-run calculation completed',
+        testId: id,
+        ...result
+      };
+    } catch (error) {
+      server.log.error(error);
+      reply.status(500);
+      return {
+        error: error instanceof Error ? error.message : 'Failed to process IRT dry-run'
+      };
+    }
+  });
+
   server.get<{ Params: { trial_id: string } }>('/api/exam/:trial_id/pages', async (request, reply) => {
     try {
       const { trial_id } = request.params;
