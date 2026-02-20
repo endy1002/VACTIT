@@ -123,7 +123,19 @@ process_responses <- function(data){
     a_vec <- item_params$a
     b_vec <- item_params$b
 
-    score_0_300 <- sapply(theta, function(t) {
+    score_0_300 <- sapply(seq_along(theta), function(i) {
+      t <- theta[i]
+      r <- raw_score[i]
+      
+      # If student got a perfect raw score, auto-assign maximum score (300)
+      if (!is.na(r) && r == n_section_items) {
+          return(300)
+      }
+      # If student got 0, auto-assign minimum score (0)
+      if (!is.na(r) && r == 0) {
+          return(0)
+      }
+      
       probs <- 1 / (1 + exp(-a_vec * (t - b_vec)))
       expected_correct <- sum(probs)
       # Scale: expected_correct out of n fitted items → proportion → 0-300
