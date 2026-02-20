@@ -243,7 +243,7 @@ export async function testRoutes(server: FastifyInstance) {
       const { processIRTForExam } = await import('../jobs/irt-processor');
 
       console.log(`[API] Manual IRT trigger (DRY-RUN) for test: ${id}`);
-      const result = await processIRTForExam(server.prisma, id, server.redis, { dryRun: true });
+      const result = await processIRTForExam(server.prisma, id, null, { dryRun: true });
 
       return {
         message: 'IRT dry-run calculation completed',

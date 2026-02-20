@@ -228,23 +228,41 @@ async function testRoutes(server) {
     server.post('/api/tests/:id/calculate-irt', async (request, reply) => {
         try {
             const { id } = request.params;
-            // Instantiate queue locally (lightweight for producing)
-            const { Queue } = await Promise.resolve().then(() => __importStar(require('bullmq')));
-            const irtQueue = new Queue('irt-queue', {
-                connection: {
-                    host: process.env.REDIS_HOST || 'localhost',
-                    port: parseInt(process.env.REDIS_PORT || '6379'),
-                }
-            });
-            await irtQueue.add('calculate', { testId: id });
-            reply.status(202);
-            return { message: 'IRT calculation job queued', testId: id };
+            const { processIRTForExam } = await Promise.resolve().then(() => __importStar(require('../jobs/irt-processor')));
+            console.log(`[API] Manual IRT trigger for test: ${id}`);
+            const result = await processIRTForExam(server.prisma, id);
+            return {
+                message: 'IRT calculation completed',
+                testId: id,
+                ...result
+            };
         }
         catch (error) {
             server.log.error(error);
             reply.status(500);
             return {
-                error: error instanceof Error ? error.message : 'Failed to queue IRT job'
+                error: error instanceof Error ? error.message : 'Failed to process IRT'
+            };
+        }
+    });
+    // Trigger IRT Calculation (Dry-Run mode without saving to DB)
+    server.post('/api/tests/:id/calculate-irt-dryrun', async (request, reply) => {
+        try {
+            const { id } = request.params;
+            const { processIRTForExam } = await Promise.resolve().then(() => __importStar(require('../jobs/irt-processor')));
+            console.log(`[API] Manual IRT trigger (DRY-RUN) for test: ${id}`);
+            const result = await processIRTForExam(server.prisma, id, null, { dryRun: true });
+            return {
+                message: 'IRT dry-run calculation completed',
+                testId: id,
+                ...result
+            };
+        }
+        catch (error) {
+            server.log.error(error);
+            reply.status(500);
+            return {
+                error: error instanceof Error ? error.message : 'Failed to process IRT dry-run'
             };
         }
     });

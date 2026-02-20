@@ -4,6 +4,7 @@ exports.responseRoutes = responseRoutes;
 const zod_1 = require("zod");
 const supabase_js_1 = require("@supabase/supabase-js");
 const logger_1 = require("../utils/logger");
+const notification_routes_1 = require("./notification.routes");
 const createResponsesSchema = zod_1.z.object({
     trialId: zod_1.z.string().min(1),
     responses: zod_1.z.array(zod_1.z.object({
@@ -136,6 +137,20 @@ async function responseRoutes(server) {
                 totalScore,
                 responseCount: rows.length
             });
+            // Send notification for practice tests (exam notifications sent after IRT)
+            const testInfo = await server.prisma.test.findUnique({
+                where: { test_id: trial.test_id },
+                select: { type: true, title: true },
+            });
+            if (testInfo?.type === 'practice') {
+                await (0, notification_routes_1.createNotification)(server.prisma, server.redis || null, {
+                    title: `📝 Kết quả ${testInfo.title}`,
+                    message: `Bạn đạt ${totalScore}/${totalQuestions} điểm. Xem chi tiết ngay!`,
+                    type: 'score',
+                    link: '/result',
+                    userId: trial.student_id,
+                });
+            }
             reply.status(201);
             return { data: { count: rows.length, scores: tacticData, total: totalScore } };
         }

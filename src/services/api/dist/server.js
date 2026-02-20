@@ -4,7 +4,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 };
 Object.defineProperty(exports, "__esModule", { value: true });
 const fastify_1 = require("fastify");
-const client_1 = require("@prisma/client");
+const prisma_1 = require("./lib/prisma");
 const bullmq_1 = require("bullmq");
 const ioredis_1 = __importDefault(require("ioredis"));
 const auth_routes_1 = require("./routes/auth.routes");
@@ -16,16 +16,10 @@ const teacher_routes_1 = require("./routes/teacher.routes");
 const leaderboard_routes_1 = require("./routes/leaderboard.routes");
 const news_routes_1 = require("./routes/news.routes");
 const notification_routes_1 = require("./routes/notification.routes");
+const overview_routes_1 = require("./routes/overview.routes");
 const logger_1 = require("./utils/logger");
-// Initialize Prisma
-const prisma = new client_1.PrismaClient({
-    log: process.env.NODE_ENV === 'development' ? ['query', 'error', 'warn'] : ['error'],
-    datasources: {
-        db: {
-            url: process.env.DATABASE_URL,
-        },
-    },
-});
+// Initialize Prisma (resilient singleton with auto-reconnect)
+const prisma = (0, prisma_1.getPrismaClient)();
 // Initialize Fastify server
 const server = (0, fastify_1.fastify)({
     logger: true
@@ -114,16 +108,22 @@ server.get('/health', async (request, reply) => {
         redis: 'not configured',
         uptime: process.uptime(),
     };
-    // Test database 
+    // Test database (with retry reconnect on failure)
     try {
-        await prisma.user.findFirst();
+        await prisma.$queryRaw `SELECT 1`;
         health.database = 'connected';
     }
     catch (error) {
-        health.status = 'degraded';
-        health.database = 'disconnected';
-        health.databaseError = error.message;
-        console.error('Database health check failed:', error.message);
+        console.error('Database health check failed, attempting reconnect with retry:', error.message);
+        const reconnected = await (0, prisma_1.reconnectWithRetry)(3); // 3 retries for health check (faster)
+        if (reconnected) {
+            health.database = 'reconnected';
+        }
+        else {
+            health.status = 'degraded';
+            health.database = 'disconnected';
+            health.databaseError = error.message;
+        }
     }
     // Test Redis (if available)
     if (redisConnection) {
@@ -206,6 +206,7 @@ server.register(teacher_routes_1.teacherRoutes);
 server.register(leaderboard_routes_1.leaderboardRoutes);
 server.register(news_routes_1.newsRoutes);
 server.register(notification_routes_1.notificationRoutes);
+server.register(overview_routes_1.overviewRoutes);
 // ============ Job Queue Endpoints ============
 // Submit scoring job
 server.post('/api/jobs/score-test', async (request, reply) => {
