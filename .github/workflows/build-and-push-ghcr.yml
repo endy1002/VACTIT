@@ -35,6 +35,9 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Lowercase repository owner
+        run: echo "REPO_OWNER=${GITHUB_REPOSITORY_OWNER,,}" >> $GITHUB_ENV
+
       - name: Build and push image (with gha cache)
         uses: docker/build-push-action@v4
         with:
@@ -43,11 +46,11 @@ jobs:
           file: ./src/services/worker/Dockerfile.r
           push: true
           tags: |
-            ghcr.io/${{ github.repository_owner }}/vactit-irt-api:latest
-            ghcr.io/${{ github.repository_owner }}/vactit-irt-api:${{ github.sha }}
+            ghcr.io/${{ env.REPO_OWNER }}/vactit-irt-api:latest
+            ghcr.io/${{ env.REPO_OWNER }}/vactit-irt-api:${{ github.sha }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
       - name: Image info
         run: |
-          echo "Image pushed: ghcr.io/${{ github.repository_owner }}/vactit-irt-api:latest"
+          echo "Image pushed: ghcr.io/${{ env.REPO_OWNER }}/vactit-irt-api:latest"
