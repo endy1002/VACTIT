@@ -309,23 +309,15 @@ export async function testRoutes(server: FastifyInstance) {
           });
 
         if (matched.length > 0) {
-          //  OPTIMIZED: Batch signed URL creation (1 request for all files)
-          const paths = matched.map((file: any) => `${folderPath}/${file.name}`);
-          const { data: signedUrls, error: signError } = await supabase.storage
-            .from(BUCKET)
-            .createSignedUrls(paths, 60 * 5);
-
-          if (signError) {
-            console.error('Batch signed URL error:', signError);
-            reply.status(500);
-            return { error: 'failed_to_create_signed_urls' };
-          }
-
-          if (signedUrls) {
-            pages = signedUrls
-              .map((item: any) => item.signedUrl)
-              .filter(Boolean) as string[];
-          }
+          // Public bucket: build public URLs directly (no signed URLs needed)
+          pages = matched
+            .map((file: any) => {
+              const { data } = supabase.storage
+                .from(BUCKET)
+                .getPublicUrl(`${folderPath}/${file.name}`);
+              return (data as any)?.publicUrl as string | null;
+            })
+            .filter((url: string | null): url is string => Boolean(url));
           break;
         }
       }
