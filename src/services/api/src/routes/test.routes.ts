@@ -248,22 +248,21 @@ export async function testRoutes(server: FastifyInstance) {
         return { error: 'Missing trial_id' };
       }
 
-      const BUCKET = 'test_images';
-      const EXTS = ['jpg', 'png', 'webp'];
-      const CACHE_TTL = 300; // 5 minutes (matches signed URL validity)
+      const PDF_BUCKET =  'pdf_files';
+      const CACHE_TTL = 300; // seconds
 
       // 0️⃣ Lấy test_id từ trial_id
       const trial = await server.prisma.trial.findUnique({
         where: { trial_id },
         select: { test_id: true }
       });
-      console.log('Fetching for trial_id:', trial_id);
+      console.log('Fetching PDF for trial_id:', trial_id);
       if (!trial) {
         reply.status(404);
         return { error: 'trial_not_found' };
       }
 
-      const cacheKey = `exam-pages:${trial.test_id}`;
+      const cacheKey = `exam-pdf:${trial.test_id}`;
 
       // 🔍 Check Redis cache first
       if (server.redis) {
@@ -280,81 +279,172 @@ export async function testRoutes(server: FastifyInstance) {
         }
       }
 
-      const folderPath = `${trial.test_id}`;
-      // 1️⃣ Read files from Supabase Storage
-      const { data: files, error } = await supabase.storage
-        .from(BUCKET)
-        .list(folderPath, { limit: 200 });
+      // Minimal lookup: try direct file names in root of pdf_files
+      const candidates = [
+        `${trial.test_id}.pdf`,
+        `${trial_id}.pdf`,
+      ];
 
-      if (error) {
-        reply.status(500);
-        return { error: 'failed_to_read_storage' };
-      }
+      let pdfPath: string | null = null;
+      let fileName: string | null = null;
 
-      if (!files || files.length === 0) {
-        reply.status(404);
-        return { error: `Folder not found: ${folderPath}` };
-      }
+      for (const candidate of candidates) {
+        const { data: publicData } = supabase.storage.from("pdf_files").getPublicUrl(candidate);
+        const publicUrl = (publicData as any)?.publicUrl || null;
 
-      // 2️⃣ Same page-detection logic
-      let pages: string[] = [];
+        if (publicUrl) {
+          pdfPath = candidate;
+          fileName = candidate;
+          const result = {
+            pdfUrl: publicUrl,
+            fileName,
+            expiresIn: CACHE_TTL,
+          };
 
-      for (const ext of EXTS) {
-        const matched = files
-          .filter((f: any) => f.name.match(new RegExp(`^page-\\d+\\.${ext}$`)))
-          .sort((a: any, b: any) => {
-            const ai = Number(a.name.match(/\d+/)?.[0] || 0);
-            const bi = Number(b.name.match(/\d+/)?.[0] || 0);
-            return ai - bi;
-          });
-
-        if (matched.length > 0) {
-          //  OPTIMIZED: Batch signed URL creation (1 request for all files)
-          const paths = matched.map((file: any) => `${folderPath}/${file.name}`);
-          const { data: signedUrls, error: signError } = await supabase.storage
-            .from(BUCKET)
-            .createSignedUrls(paths, 60 * 5);
-
-          if (signError) {
-            console.error('Batch signed URL error:', signError);
-            reply.status(500);
-            return { error: 'failed_to_create_signed_urls' };
+          if (server.redis) {
+            try {
+              await server.redis.setex(cacheKey, CACHE_TTL, JSON.stringify(result));
+            } catch (cacheErr) {
+              console.error('Cache write error:', cacheErr);
+            }
           }
 
-          if (signedUrls) {
-            pages = signedUrls
-              .map((item: any) => item.signedUrl)
-              .filter(Boolean) as string[];
-          }
-          break;
+          return result;
         }
       }
 
-      if (pages.length === 0) {
-        reply.status(204);
-        return { error: 'No pages found' };
-      }
+      // Fallback to signed URL if public URL not available
+      for (const candidate of candidates) {
+        const { data: signedPdf, error: signedErr } = await supabase.storage
+          .from(PDF_BUCKET)
+          .createSignedUrl(candidate, CACHE_TTL);
 
-      const result = { pages, totalPages: pages.length };
+        if (!signedErr && signedPdf?.signedUrl) {
+          pdfPath = candidate;
+          fileName = candidate;
+          const result = {
+            pdfUrl: signedPdf.signedUrl,
+            fileName,
+            expiresIn: CACHE_TTL,
+          };
 
-      // 💾 Store in Redis cache
-      if (server.redis) {
-        try {
-          await server.redis.setex(cacheKey, CACHE_TTL, JSON.stringify(result));
-          console.log(`💾 Cached ${cacheKey} for ${CACHE_TTL}s`);
-        } catch (cacheErr) {
-          console.error('Cache write error:', cacheErr);
-          // Continue without caching on error
+          if (server.redis) {
+            try {
+              await server.redis.setex(cacheKey, CACHE_TTL, JSON.stringify(result));
+            } catch (cacheErr) {
+              console.error('Cache write error:', cacheErr);
+            }
+          }
+
+          return result;
         }
       }
 
-      console.log('Found pages:', pages.length);
-      return result;
+      reply.status(404);
+      return { error: 'pdf_not_found' };
     } catch (err) {
       server.log.error(err);
       reply.status(500);
       return { error: err instanceof Error ? err.message : 'internal_error' };
     }
+
+    /*
+    ORIGINAL IMAGE PAGE HANDLER (kept for reference):
+    const BUCKET = 'test_images';
+    const EXTS = ['jpg', 'png', 'webp'];
+    const CACHE_TTL = 300; // 5 minutes (matches signed URL validity)
+
+    // 0️⃣ Lấy test_id từ trial_id
+    const trial = await server.prisma.trial.findUnique({
+      where: { trial_id },
+      select: { test_id: true }
+    });
+    console.log('Fetching for trial_id:', trial_id);
+    if (!trial) {
+      reply.status(404);
+      return { error: 'trial_not_found' };
+    }
+
+    const cacheKey = `exam-pages:${trial.test_id}`;
+
+    // 🔍 Check Redis cache first
+    if (server.redis) {
+      try {
+        const cached = await server.redis.get(cacheKey);
+        if (cached) {
+          console.log(`Cache HIT for ${cacheKey}`);
+          return JSON.parse(cached);
+        }
+        console.log(`Cache MISS for ${cacheKey}`);
+      } catch (cacheErr) {
+        console.error('Cache read error:', cacheErr);
+        // Continue without cache on error
+      }
+    }
+
+    const folderPath = `${trial.test_id}`;
+    // 1️⃣ Read files from Supabase Storage
+    const { data: files, error } = await supabase.storage
+      .from(BUCKET)
+      .list(folderPath, { limit: 200 });
+
+    if (error) {
+      reply.status(500);
+      return { error: 'failed_to_read_storage' };
+    }
+
+    if (!files || files.length === 0) {
+      reply.status(404);
+      return { error: `Folder not found: ${folderPath}` };
+    }
+
+    // 2️⃣ Same page-detection logic
+    let pages: string[] = [];
+
+    for (const ext of EXTS) {
+      const matched = files
+        .filter((f: any) => f.name.match(new RegExp(`^page-\\d+\\.${ext}$`)))
+        .sort((a: any, b: any) => {
+          const ai = Number(a.name.match(/\\d+/)?.[0] || 0);
+          const bi = Number(b.name.match(/\\d+/)?.[0] || 0);
+          return ai - bi;
+        });
+
+      if (matched.length > 0) {
+        // Public bucket: build public URLs directly (no signed URLs needed)
+        pages = matched
+          .map((file: any) => {
+            const { data } = supabase.storage
+              .from(BUCKET)
+              .getPublicUrl(`${folderPath}/${file.name}`);
+            return (data as any)?.publicUrl as string | null;
+          })
+          .filter((url: string | null): url is string => Boolean(url));
+        break;
+      }
+    }
+
+    if (pages.length === 0) {
+      reply.status(204);
+      return { error: 'No pages found' };
+    }
+
+    const result = { pages, totalPages: pages.length };
+
+    // 💾 Store in Redis cache
+    if (server.redis) {
+      try {
+        await server.redis.setex(cacheKey, CACHE_TTL, JSON.stringify(result));
+        console.log(`💾 Cached ${cacheKey} for ${CACHE_TTL}s`);
+      } catch (cacheErr) {
+        console.error('Cache write error:', cacheErr);
+        // Continue without caching on error
+      }
+    }
+
+    console.log('Found pages:', pages.length);
+    return result;
+    */
   });
 
 

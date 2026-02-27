@@ -18,6 +18,7 @@ export type Question = {
 type ExamContainerProps = {
   testId: string;
   initialPages: string[]; // Data được truyền từ Server Component
+  initialPdfUrl?: string;
   totalQuestions?: number;
   testTitle?: string;
   durationMinutes?: number;
@@ -27,6 +28,7 @@ type ExamContainerProps = {
 export default function ExamContainer({
   testId,
   initialPages,
+  initialPdfUrl,
   totalQuestions = 120,
   testTitle,
   durationMinutes,
@@ -221,6 +223,7 @@ export default function ExamContainer({
       <div className="flex flex-row gap-4 p-4 flex-1 overflow-hidden">
         <ViewerPane
           pages={initialPages}
+          pdfUrl={initialPdfUrl}
           zoom={zoom}
           testData={testData}
           startAt={Date.now()}

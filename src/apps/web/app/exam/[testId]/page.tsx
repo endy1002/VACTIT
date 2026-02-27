@@ -14,6 +14,7 @@ export default function ExamPage(props: {
   const params = React.use(props.params)
   const testId = params.testId
   const [pages, setPages] = useState<string[]>([]);
+  const [pdfUrl, setPdfUrl] = useState<string | null>(null);
   const [trialData, setTrialData] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const router = useRouter();
@@ -38,6 +39,7 @@ export default function ExamPage(props: {
     ])
       .then(([pagesRes, trialRes]) => {
         setPages(pagesRes.pages || []);
+        setPdfUrl(pagesRes.pdfUrl || null);
         setTrialData(trialRes.data);
       })
       .catch((err) => {
@@ -59,6 +61,7 @@ export default function ExamPage(props: {
         <ExamContainer
           testId={testId}
           initialPages={pages}
+          initialPdfUrl={pdfUrl || undefined}
           testTitle={trialData?.test?.title}
           durationMinutes={trialData?.test?.duration}
           realTestId={trialData?.test?.test_id}
