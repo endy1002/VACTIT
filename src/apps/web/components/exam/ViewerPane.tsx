@@ -50,7 +50,7 @@ export default function ViewerPane({ pages, pdfUrl, zoom, testData, startAt, onE
         <div className="flex flex-col items-center gap-4">
           {pdfUrl ? (
             <div className="w-full max-w-5xl">
-              <div className="w-full h-[75vh] bg-white border border-gray-200 shadow-sm overflow-hidden">
+              <div className="w-full h-[80vh] bg-white border border-gray-200 shadow-sm overflow-hidden">
                 <iframe
                   src={`${pdfUrl}#toolbar=0&navpanes=0&view=FitH`}
                   className="w-full h-full bg-white"
