@@ -313,33 +313,6 @@ export async function testRoutes(server: FastifyInstance) {
         }
       }
 
-      // Fallback to signed URL if public URL not available
-      for (const candidate of candidates) {
-        const { data: signedPdf, error: signedErr } = await supabase.storage
-          .from(PDF_BUCKET)
-          .createSignedUrl(candidate, CACHE_TTL);
-
-        if (!signedErr && signedPdf?.signedUrl) {
-          pdfPath = candidate;
-          fileName = candidate;
-          const result = {
-            pdfUrl: signedPdf.signedUrl,
-            fileName,
-            expiresIn: CACHE_TTL,
-          };
-
-          if (server.redis) {
-            try {
-              await server.redis.setex(cacheKey, CACHE_TTL, JSON.stringify(result));
-            } catch (cacheErr) {
-              console.error('Cache write error:', cacheErr);
-            }
-          }
-
-          return result;
-        }
-      }
-
       reply.status(404);
       return { error: 'pdf_not_found' };
     } catch (err) {
