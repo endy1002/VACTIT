@@ -42,47 +42,66 @@ export async function trialRoutes(server: FastifyInstance) {
   });
 
   // Get trial by ID
-  server.get<{ Params: { id: string } }>('/api/trials/:id', async (request, reply) => {
-    try {
-      const trial = await server.prisma.trial.findUnique({
-        where: { trial_id: request.params.id },
-        include: {
-          //  OPTIMIZED: Only select necessary student fields
-          student: {
-            select: { user_id: true, name: true }
-          },
-          test: {
-            select: {
-              test_id: true,
-              title: true,
-              type: true,
-              duration: true,
-            },
-          },
-          // ✅ OPTIMIZED: Removed responses include - not needed for initial load
-          // Use /api/trials/:id/details if responses are needed
+  server.get<{ Params: { id: string }; Querystring: { userId?: string } }>(
+    '/api/trials/:id',
+    async (request, reply) => {
+      try {
+        const { id } = request.params;
+        const requesterId = request.query.userId;
+        console.log(`Fetching trial ${id} for requester ${requesterId}`);
+        if (!requesterId) {
+          reply.status(401);
+          return { error: 'missing_user_id' };
         }
-      });
 
-      if (!trial) {
-        reply.status(404);
-        return { error: 'Trial not found' };
+        const trial = await server.prisma.trial.findUnique({
+          where: { trial_id: id },
+          include: {
+            student: {
+              select: { user_id: true, name: true }
+            },
+            test: {
+              select: {
+                test_id: true,
+                title: true,
+                type: true,
+                duration: true,
+              },
+            },
+          }
+        });
+
+        if (!trial) {
+          reply.status(404);
+          return { error: 'Trial not found' };
+        }
+
+        if (trial.student?.user_id !== requesterId) {
+          reply.status(403);
+          return { error: 'forbidden' };
+        }
+
+        // Prevent re-entry for completed exams (has responses)
+        const responseCount = await server.prisma.response.count({ where: { trial_id: id } });
+        if (trial.test?.type === 'exam' && responseCount > 0) {
+          reply.status(400);
+          return { error: 'already_submitted' };
+        }
+
+        return {
+          data: {
+            ...trial,
+            testDuration: trial.test?.duration ?? null,
+          },
+        };
+      } catch (error) {
+        reply.status(500);
+        return {
+          error: error instanceof Error ? error.message : 'Failed to fetch trial'
+        };
       }
-
-      // expose test duration directly for convenience
-      return {
-        data: {
-          ...trial,
-          testDuration: trial.test?.duration ?? null,
-        },
-      };
-    } catch (error) {
-      reply.status(500);
-      return {
-        error: error instanceof Error ? error.message : 'Failed to fetch trial'
-      };
     }
-  });
+  );
 
   // Get trials by student (with Redis cache)
   server.get<{ Params: { studentId: string } }>(
