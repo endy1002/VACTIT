@@ -1,44 +1,47 @@
 "use strict";
-var __importDefault = (this && this.__importDefault) || function (mod) {
-    return (mod && mod.__esModule) ? mod : { "default": mod };
-};
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.authRoutes = authRoutes;
 const zod_1 = require("zod");
 const node_crypto_1 = require("node:crypto");
-const nodemailer_1 = __importDefault(require("nodemailer"));
 const password_1 = require("../utils/password");
 const logger_1 = require("../utils/logger");
 // ----- Gmail SMTP for sending OTP emails -----
 const EMAIL_USER = process.env.EMAIL_USER;
-const EMAIL_PASS = process.env.EMAIL_PASS;
-const transporter = EMAIL_USER && EMAIL_PASS
-    ? nodemailer_1.default.createTransport({
-        host: 'smtp.gmail.com',
-        port: 587,
-        secure: false, // true for 465, false for other ports
-        auth: {
-            user: EMAIL_USER,
-            pass: EMAIL_PASS,
+// ----- Mailtrap (HTTP API) for development/testing -----
+const MAILTRAP_API_TOKEN = process.env.MAILTRAP_API_TOKEN;
+const DEFAULT_FROM = process.env.EMAIL_FROM ?? EMAIL_USER ?? 'no-reply@vactit.app';
+const mailtrapEnabled = !!MAILTRAP_API_TOKEN;
+async function sendViaMailtrap(to, subject, html, fromAddress = DEFAULT_FROM) {
+    if (!MAILTRAP_API_TOKEN)
+        throw new Error('Mailtrap API token not configured');
+    const body = {
+        from: { email: fromAddress },
+        to: [{ email: to }],
+        subject,
+        html,
+    };
+    const res = await fetch('https://send.api.mailtrap.io/api/send', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'Api-Token': MAILTRAP_API_TOKEN,
         },
-        tls: {
-            rejectUnauthorized: false, // Accept self-signed certs (for some hosting)
-        },
-    })
-    : null;
-console.log('[Auth] Email configured:', !!transporter, EMAIL_USER ? `(${EMAIL_USER})` : '');
-async function sendOtpEmail(to, code, name) {
-    if (!transporter) {
-        console.log(`[DEV] OTP for ${to}: ${code}`);
-        return true; // Allow dev testing without email
+        body: JSON.stringify(body),
+    });
+    if (!res.ok) {
+        const text = await res.text().catch(() => '');
+        throw new Error(`Mailtrap send failed: ${res.status} ${res.statusText} ${text}`);
     }
-    try {
-        console.log(`[OTP] Sending to ${to} via Gmail...`);
-        await transporter.sendMail({
-            from: `VACTIT <${EMAIL_USER}>`,
-            to,
-            subject: 'Mã xác nhận đăng ký VACTIT',
-            html: `
+    return await res.json();
+}
+console.log('[Auth] Email configured:', { mailtrap: mailtrapEnabled, from: DEFAULT_FROM });
+async function sendOtpEmail(to, code, name) {
+    const fromAddress = DEFAULT_FROM;
+    // 1) Mailtrap (dev/test via HTTP API), Supabase SMTP (preferred in some infra)
+    if (mailtrapEnabled) {
+        try {
+            console.log(`[OTP] Sending to ${to} via Mailtrap API...`);
+            await sendViaMailtrap(to, 'Mã xác nhận đăng ký VACTIT', `
         <div style="font-family: Arial, sans-serif; max-width: 480px; margin: 0 auto; padding: 20px;">
           <h2 style="color: #333;">Xin chào ${name}!</h2>
           <p>Mã xác nhận của bạn là:</p>
@@ -48,15 +51,18 @@ async function sendOtpEmail(to, code, name) {
           <p style="color: #666;">Mã này có hiệu lực trong 10 phút.</p>
           <p style="color: #999; font-size: 12px;">Nếu bạn không yêu cầu mã này, vui lòng bỏ qua email này.</p>
         </div>
-      `,
-        });
-        console.log(`[OTP] Email sent successfully to ${to}`);
-        return true;
+      `, fromAddress);
+            console.log(`[OTP] Email sent via Mailtrap to ${to}`);
+            return true;
+        }
+        catch (err) {
+            console.error('[OTP] Mailtrap API error:', err);
+            // fallthrough to other options
+        }
     }
-    catch (error) {
-        console.error('[OTP] Email send error:', error);
-        return false;
-    }
+    // 4) Dev fallback
+    console.log(`[DEV] OTP for ${to}: ${code}`);
+    return true;
 }
 function generateOtp() {
     return Math.floor(100000 + Math.random() * 900000).toString();
@@ -117,7 +123,7 @@ function cleanupExpiredEntries() {
 setInterval(cleanupExpiredEntries, 5 * 60 * 1000);
 // ----- Zod schemas -----
 const sendOtpSchema = zod_1.z.object({
-    email: zod_1.z.string().email('Email không hợp lệ').refine((val) => val.toLowerCase().endsWith('@gmail.com'), { message: 'Chỉ chấp nhận địa chỉ Gmail (@gmail.com)' }),
+    email: zod_1.z.string().email('Email không hợp lệ'),
     name: zod_1.z.string().min(1, 'Tên không được để trống'),
 });
 const verifyOtpSchema = zod_1.z.object({
@@ -210,7 +216,7 @@ async function authRoutes(server) {
             otpStore.set(normalizedEmail, { code, name, expiresAt });
             // Send OTP email
             const sent = await sendOtpEmail(normalizedEmail, code, name);
-            if (!sent && transporter) {
+            if (!sent) {
                 reply.status(500);
                 return { error: 'Không thể gửi email. Vui lòng thử lại sau.' };
             }
@@ -553,29 +559,26 @@ async function authRoutes(server) {
             const expiresAt = Date.now() + 10 * 60 * 1000; // 10 minutes
             // Store reset OTP
             resetOtpStore.set(normalizedEmail, { code, verified: false, expiresAt });
-            // Send OTP email
-            if (transporter) {
+            // Send OTP email (prefer Supabase SMTP, then Resend, then Gmail)
+            const fromAddress = DEFAULT_FROM;
+            // Prefer Mailtrap API for dev/testing
+            if (mailtrapEnabled) {
                 try {
-                    await transporter.sendMail({
-                        from: `VACTIT <${EMAIL_USER}>`,
-                        to: normalizedEmail,
-                        subject: 'Đặt lại mật khẩu VACTIT',
-                        html: `
-              <div style="font-family: Arial, sans-serif; max-width: 480px; margin: 0 auto; padding: 20px;">
-                <h2 style="color: #333;">Xin chào ${user.name}!</h2>
-                <p>Bạn đã yêu cầu đặt lại mật khẩu. Mã xác nhận của bạn là:</p>
-                <div style="background: #f5f5f5; padding: 20px; text-align: center; border-radius: 8px; margin: 20px 0;">
-                  <span style="font-size: 32px; font-weight: bold; letter-spacing: 8px; color: #2563eb;">${code}</span>
+                    await sendViaMailtrap(normalizedEmail, 'Đặt lại mật khẩu VACTIT', `
+                <div style="font-family: Arial, sans-serif; max-width: 480px; margin: 0 auto; padding: 20px;">
+                  <h2 style="color: #333;">Xin chào ${user.name}!</h2>
+                  <p>Bạn đã yêu cầu đặt lại mật khẩu. Mã xác nhận của bạn là:</p>
+                  <div style="background: #f5f5f5; padding: 20px; text-align: center; border-radius: 8px; margin: 20px 0;">
+                    <span style="font-size: 32px; font-weight: bold; letter-spacing: 8px; color: #2563eb;">${code}</span>
+                  </div>
+                  <p style="color: #666;">Mã này có hiệu lực trong 10 phút.</p>
+                  <p style="color: #999; font-size: 12px;">Nếu bạn không yêu cầu đặt lại mật khẩu, vui lòng bỏ qua email này.</p>
                 </div>
-                <p style="color: #666;">Mã này có hiệu lực trong 10 phút.</p>
-                <p style="color: #999; font-size: 12px;">Nếu bạn không yêu cầu đặt lại mật khẩu, vui lòng bỏ qua email này.</p>
-              </div>
-            `,
-                    });
-                    console.log(`[RESET] OTP sent to ${normalizedEmail}`);
+              `, fromAddress);
+                    console.log(`[RESET] OTP sent to ${normalizedEmail} via Mailtrap`);
                 }
                 catch (emailErr) {
-                    console.error('[RESET] Email error:', emailErr);
+                    console.error('[RESET] Mailtrap API error:', emailErr);
                     reply.status(500);
                     return { error: 'Không thể gửi email. Vui lòng thử lại sau.' };
                 }

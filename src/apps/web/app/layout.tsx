@@ -40,7 +40,21 @@ const monaSans = localFont({
 
 export const metadata: Metadata = {
   title: 'VACTIT – Thi thử Đánh giá năng lực ĐHQG-HCM V-ACT',
-  description: 'Hệ thống thi thử đánh giá năng lực V-ACT miễn phí, tích hợp chấm điểm theo lý thuyết IRT và phân tích kết quả chi tiết.',
+  description: 'Hệ thống thi thử đánh giá năng lực (ĐGNL HCM) VACT miễn phí, tích hợp chấm điểm theo lý thuyết IRT và phân tích kết quả chi tiết.',
+  icons: {
+    icon: [
+      { url: '/favicon.ico', sizes: 'any' },
+      { url: '/icon.png', type: 'image/png' },
+    ],
+    apple: '/apple-icon.png',
+  },
+  openGraph: {
+    title: 'VACTIT – Thi thử Đánh giá năng lực ĐHQG-HCM V-ACT',
+    description: 'Hệ thống thi thử đánh giá năng lực (ĐGNL HCM) VACT miễn phí, tích hợp chấm điểm theo lý thuyết IRT và phân tích kết quả chi tiết.',
+    siteName: 'VACTIT',
+    type: 'website',
+    images: ['/assets/logos/logo.png'],
+  },
 };
 
 export default function RootLayout({
@@ -50,6 +64,9 @@ export default function RootLayout({
 }) {
   return (
     <html lang="vi" className={`h-full ${monaSans.variable}`}>
+      <head>
+        <link rel="manifest" href="/manifest.json" />
+      </head>
       <body className={`min-h-screen bg-slate-50 text-slate-900 antialiased ${monaSans.className}`}>
         {/* ✅ SWRProvider: Global cache persists across page navigations */}
         <SWRProvider>

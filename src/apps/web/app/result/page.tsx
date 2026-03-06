@@ -42,15 +42,29 @@ const SECTION_COLORS: Record<string, string> = {
 export default function ResultsPage() {
   const router = useRouter();
 
-  // ✅ SWR: Instant loading with cached data
+  // SWR: Instant loading with cached data
   const { userId, isLoading: userLoading, isError: userError } = useCurrentUser();
   const { trials: rawTrials, isLoading: trialsLoading, isError: trialsError } = useStudentTrials(userId);
 
-  // Sort trials by start_time descending
+  // Filter & sort trials: exam trials only visible after due_time AND with processed_score
   const trials = useMemo(() => {
-    return [...rawTrials].sort(
-      (a, b) => new Date(b.start_time).getTime() - new Date(a.start_time).getTime()
-    ) as TrialListItem[];
+    const now = new Date();
+    return [...rawTrials]
+      .filter((t) => {
+        // Practice trials: always visible
+        if (t.test?.type !== 'exam') return true;
+        // Exam trials: only show after due_time AND with processed_score
+        const dueTime = t.test?.due_time ? new Date(t.test.due_time) : null;
+        const hasDuePassed = dueTime ? now > dueTime : true;
+        const hasProcessedScore =
+          t.processed_score &&
+          typeof t.processed_score === 'object' &&
+          Object.keys(t.processed_score).length > 0;
+        return hasDuePassed && hasProcessedScore;
+      })
+      .sort(
+        (a, b) => new Date(b.start_time).getTime() - new Date(a.start_time).getTime()
+      ) as TrialListItem[];
   }, [rawTrials]);
 
   // Selected trial state

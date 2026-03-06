@@ -12,6 +12,7 @@ export type TrialListItem = {
     title: string;
     type: string;
     duration: number | null;
+    due_time: string | null;
   };
   _count?: { responses: number };
 };

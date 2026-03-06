@@ -1,0 +1,20 @@
+{
+  "name": "VACTIT – Thi thử Đánh giá năng lực V-ACT",
+  "short_name": "VACTIT",
+  "icons": [
+    {
+      "src": "/icon.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "/assets/logos/logo.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    }
+  ],
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#f8fafc",
+  "theme_color": "#1e293b"
+}

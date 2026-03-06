@@ -1,8 +1,8 @@
 import { Worker, Job } from 'bullmq';
 import IORedis from 'ioredis';
-import { PrismaClient } from '@prisma/client';
+import { getPrismaClient } from './lib/prisma';
 
-const prisma = new PrismaClient();
+const prisma = getPrismaClient();
 
 const redisConnection = new IORedis(process.env.REDIS_URL || 'redis://localhost:6379', {
   maxRetriesPerRequest: null,
@@ -39,12 +39,6 @@ const scoringWorker = new Worker(
       });
 
       console.log(`Found ${responses.length} responses`);
-
-      // Step 3: Calculate score (simplified - replace with actual IRT algorithm)
-      // In production, this would:
-      // - Fetch question IRT parameters
-      // - Calculate ability estimate using IRT formula
-      // - Apply any scoring rules
       await job.updateProgress(75);
 
       // Simplified scoring: 10 points per correct answer
@@ -57,12 +51,6 @@ const scoringWorker = new Worker(
         where: { trial_id: trialId },
         data: {
           processed_score: score,
-          // raw_score: score, // Optional: if you want to store it as raw_score too, but processed_score seems to be the main one
-          // updated_at is not in the schema shown earlier (only start_time/end_time/raw_score/processed_score/tactic)
-          // The schema showed:
-          // trial_id, student_id, test_id, start_time, end_time, raw_score, processed_score, tactic.
-          // There is NO updated_at field in the Trial model shown in schema.prisma:179-ish (Step 179 output)
-          // So I should remove updated_at as well.
         },
       });
 

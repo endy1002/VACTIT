@@ -6,41 +6,44 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.startIRTScheduler = startIRTScheduler;
 exports.stopIRTScheduler = stopIRTScheduler;
 const node_cron_1 = __importDefault(require("node-cron"));
-const bullmq_1 = require("bullmq");
 const client_1 = require("@prisma/client");
-const ioredis_1 = __importDefault(require("ioredis"));
 const logger_1 = require("../utils/logger");
+const irt_processor_1 = require("./irt-processor");
 let redis = null;
 let prismaInstance = null;
+// In-memory guard: tracks exam IDs currently being processed
+// Prevents redundant re-triggers when processing takes longer than 1 minute
+const processingExams = new Set();
 /**
- * Scheduled job to check for exams that reached due_time and trigger IRT calculation
- * Runs every minute with distributed lock to prevent duplicate triggers
+ * Scheduled job to check for exams that reached due_time and trigger IRT calculation.
+ * Runs every minute. Uses Redis lock if available to prevent duplicate triggers.
+ * Uses in-memory Set to skip exams already being processed.
+ *
  * @param prisma - Shared Prisma client instance from server
- * @param redisClient - Optional shared Redis client (will create if not provided)
+ * @param redisClient - Optional shared Redis client for distributed locking
  */
 function startIRTScheduler(prisma, redisClient) {
-    // Store shared instances
     prismaInstance = prisma;
-    redis = redisClient || new ioredis_1.default(process.env.REDIS_URL || 'redis://localhost:6379', {
-        maxRetriesPerRequest: null,
-        enableReadyCheck: false,
-    });
-    // Run every minute: '* * * * *'
-    // Or every 5 minutes: '*/5 * * * *'
+    redis = redisClient || null;
     const schedule = process.env.IRT_SCHEDULER_CRON || '* * * * *';
-    console.log(` Starting IRT scheduler (${schedule})...`);
+    console.log(`📅 Starting IRT scheduler (${schedule})...`);
     node_cron_1.default.schedule(schedule, async () => {
         const lockKey = 'irt-scheduler:lock';
-        const lockTTL = 55; // Lock expires in 55 seconds (before next run)
+        const lockTTL = 55;
         try {
-            // Try to acquire distributed lock (only one instance will succeed)
-            const acquired = await redis.set(lockKey, Date.now().toString(), 'EX', lockTTL, 'NX');
-            if (!acquired) {
-                // Another instance is already processing
-                return;
+            // Distributed lock (only if Redis available)
+            if (redis) {
+                try {
+                    const acquired = await redis.set(lockKey, Date.now().toString(), 'EX', lockTTL, 'NX');
+                    if (!acquired) {
+                        return; // Another instance is already processing
+                    }
+                    console.log('🔒 Acquired scheduler lock, checking for exams...');
+                }
+                catch (redisErr) {
+                    console.warn('[Scheduler] Redis lock unavailable, proceeding without lock');
+                }
             }
-            console.log('🔒 Acquired scheduler lock, checking for exams...');
-            // Get current time for comparison
             const now = new Date();
             console.log('[Scheduler] Time check:', {
                 nowUTC: now.toISOString(),
@@ -49,26 +52,30 @@ function startIRTScheduler(prisma, redisClient) {
             if (!prismaInstance) {
                 throw new Error('Prisma instance not initialized');
             }
-            // Find all exams that:
-            // 1. type = 'exam'
-            // 2. due_time has passed (compared against UTC timestamp)
-            // 3. Has at least one trial with processed_score = null (IRT not calculated yet)
+            // Find exams: type='exam', due_time passed, has unprocessed trials
+            // processed_score can be: null (DbNull), JSON null, or {} (empty object)
             const examsNeedingIRT = await prismaInstance.test.findMany({
                 where: {
                     type: 'exam',
                     due_time: {
-                        lte: now, // due_time <= now (both UTC timestamps)
+                        lte: now,
                     },
                     trials: {
                         some: {
-                            processed_score: { equals: client_1.Prisma.JsonNull }, // Has trials without IRT scores (JSON null)
+                            OR: [
+                                { processed_score: { equals: client_1.Prisma.AnyNull } },
+                                { processed_score: { equals: {} } },
+                            ],
                         },
                     },
                 },
                 include: {
                     trials: {
                         where: {
-                            processed_score: { equals: client_1.Prisma.JsonNull },
+                            OR: [
+                                { processed_score: { equals: client_1.Prisma.AnyNull } },
+                                { processed_score: { equals: {} } },
+                            ],
                         },
                         select: {
                             trial_id: true,
@@ -78,7 +85,10 @@ function startIRTScheduler(prisma, redisClient) {
             });
             if (examsNeedingIRT.length === 0) {
                 console.log('[Scheduler] No exams need IRT calculation at this time');
-                return; // No exams need IRT calculation
+                if (processingExams.size > 0) {
+                    console.log(`[Scheduler] (${processingExams.size} exam(s) still processing: ${[...processingExams].join(', ')})`);
+                }
+                return;
             }
             console.log(`🔍 Found ${examsNeedingIRT.length} exam(s) past due time:`, examsNeedingIRT.map(e => ({
                 id: e.test_id,
@@ -86,51 +96,55 @@ function startIRTScheduler(prisma, redisClient) {
                 due_time: e.due_time,
                 trials_pending: e.trials.length
             })));
-            const irtQueue = new bullmq_1.Queue('irt-queue', {
-                connection: {
-                    host: process.env.REDIS_HOST || 'localhost',
-                    port: parseInt(process.env.REDIS_PORT || '6379'),
-                },
-            });
+            // Process each exam — skip if already being processed
             for (const exam of examsNeedingIRT) {
-                // Trigger IRT calculation for this exam
-                await irtQueue.add('calculate', { testId: exam.test_id });
-                (0, logger_1.logQueue)('irt-queue', 'add', undefined, {
-                    testId: exam.test_id,
-                    title: exam.title,
-                    dueTime: exam.due_time,
-                    trialsCount: exam.trials.length,
-                    trigger: 'scheduled_auto',
+                if (processingExams.has(exam.test_id)) {
+                    console.log(`⏳ Skipping exam ${exam.test_id} (${exam.title}) — already processing`);
+                    continue;
+                }
+                // Mark as processing BEFORE starting (non-blocking: fire and forget)
+                processingExams.add(exam.test_id);
+                console.log(`🚀 Processing IRT for exam: ${exam.test_id} (${exam.title}) - ${exam.trials.length} trial(s) pending`);
+                // Fire and don't block the scheduler loop — let it finish so lock is released
+                (0, irt_processor_1.processIRTForExam)(prismaInstance, exam.test_id, redis)
+                    .then(result => {
+                    console.log(`✅ IRT completed for exam: ${exam.test_id} - ${result.processed} trial(s) processed`);
+                })
+                    .catch(examError => {
+                    console.error(`❌ IRT failed for exam ${exam.test_id}:`, examError.message);
+                    (0, logger_1.logError)(examError, {
+                        context: 'irt_scheduler_exam',
+                        testId: exam.test_id,
+                    });
+                })
+                    .finally(() => {
+                    processingExams.delete(exam.test_id);
                 });
-                console.log(`✅ Triggered IRT for exam: ${exam.test_id} (${exam.title}) - ${exam.trials.length} trial(s) pending - Due: ${exam.due_time}`);
             }
-            await irtQueue.close();
         }
         catch (error) {
-            console.error(' IRT Scheduler error:', error);
+            console.error('❌ IRT Scheduler error:', error);
             (0, logger_1.logError)(error, {
                 context: 'irt_scheduler',
             });
         }
         finally {
-            // Always release lock (even on error)
-            try {
-                await redis.del(lockKey);
-            }
-            catch (unlockError) {
-                console.error('Failed to release scheduler lock:', unlockError);
+            // Release lock if Redis available
+            if (redis) {
+                try {
+                    await redis.del(lockKey);
+                }
+                catch (unlockError) {
+                    console.error('Failed to release scheduler lock:', unlockError);
+                }
             }
         }
     });
-    console.log(' IRT scheduler started successfully');
+    console.log('✅ IRT scheduler started successfully');
 }
 /**
  * Graceful shutdown handler
  */
 async function stopIRTScheduler() {
-    // Only disconnect Redis if we created it locally (not shared)
-    if (redis) {
-        await redis.quit();
-    }
     console.log('⏹  IRT scheduler stopped');
 }

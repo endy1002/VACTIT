@@ -1,10 +1,10 @@
 import { Worker, Job } from 'bullmq';
 import IORedis from 'ioredis';
-import { PrismaClient } from '@prisma/client';
+import { getPrismaClient } from './lib/prisma';
 import axios from 'axios';
 import { logIRT, logError, logPerformance } from './utils/logger';
 
-const prisma = new PrismaClient();
+const prisma = getPrismaClient();
 
 const redisConnection = new IORedis(process.env.REDIS_URL || 'redis://localhost:6379', {
     maxRetriesPerRequest: null,
@@ -21,22 +21,29 @@ const irtWorker = new Worker(
     async (job: Job<IRTJobData>) => {
         const startTime = Date.now();
         const { testId } = job.data;
-        
-        logIRT(job.id!, 'processing', testId, undefined, { 
-            attemptNumber: job.attemptsMade 
+
+        logIRT(job.id!, 'processing', testId, undefined, {
+            attemptNumber: job.attemptsMade
         });
 
         try {
             await job.updateProgress(10);
 
             // 1. Fetch Questions (to know correct answers and order)
-            // Assuming questions are ordered by some index or we sort them by question_id
-            // The previous code implied question_id structure like "testId_index".
-            // We need a reliable order. Sorting by question_id string might work if padded, 
-            // but let's assume we sort by question_id for now as implied by the R script expecting 120 cols.
-            const questions = await prisma.question.findMany({
+            // question_id format: "{testId}_{index}" where index is 1-based integer.
+            // IMPORTANT: Must sort NUMERICALLY by the index suffix, NOT by string.
+            // String sort of "_1","_10","_100"... scrambles the order completely.
+            const questionsUnsorted = await prisma.question.findMany({
                 where: { test_id: testId },
-                orderBy: { question_id: 'asc' },
+            });
+
+            // Sort by numeric index extracted from question_id
+            const questions = questionsUnsorted.sort((a, b) => {
+                const getIndex = (id: string) => {
+                    const parts = id.split('_');
+                    return Number(parts[parts.length - 1]) || 0;
+                };
+                return getIndex(a.question_id) - getIndex(b.question_id);
             });
 
             if (questions.length === 0) {
@@ -155,15 +162,15 @@ const irtWorker = new Worker(
             // await prisma.test.update({ where: { test_id: testId }, data: { status: 'PROCESSED' } });
 
             await job.updateProgress(100);
-            
+
             const duration = Date.now() - startTime;
             logIRT(job.id!, 'completed', testId, duration, {
                 trialsProcessed: studentsScores.length,
                 totalQuestions: questions.length
             });
-            logPerformance('irt_processing', duration, 30000, { 
+            logPerformance('irt_processing', duration, 30000, {
                 testId,
-                trialsCount: studentsScores.length 
+                trialsCount: studentsScores.length
             });
 
             return { success: true, processed: studentsScores.length };
@@ -174,12 +181,12 @@ const irtWorker = new Worker(
                 error: error.message,
                 attemptNumber: job.attemptsMade
             });
-            logError(error, { 
+            logError(error, {
                 context: 'irt_processing',
                 testId,
-                jobId: job.id 
+                jobId: job.id
             });
-            
+
             if (error.response) {
                 console.error('IRT Service Response:', error.response.data);
             }

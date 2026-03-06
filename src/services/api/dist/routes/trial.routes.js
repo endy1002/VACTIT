@@ -106,7 +106,7 @@ async function trialRoutes(server) {
                 where: { student_id: studentId },
                 orderBy: { start_time: 'desc' },
                 include: {
-                    test: { select: { test_id: true, title: true, type: true, duration: true } },
+                    test: { select: { test_id: true, title: true, type: true, duration: true, due_time: true } },
                     _count: { select: { responses: true } },
                 },
             });
