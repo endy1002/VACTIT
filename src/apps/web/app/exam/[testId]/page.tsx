@@ -4,6 +4,7 @@ import ExamContainer from "@/components/exam/ExamContainer";
 import { api } from "@/lib/api-client";
 import Loading from "./loading";
 import { useRouter } from "next/navigation";
+import { useCurrentUser } from "@/lib/swr-hooks";
 
 type Params = Promise<{ testId: string }>
 
@@ -18,8 +19,15 @@ export default function ExamPage(props: {
   const [loading, setLoading] = useState(true);
   const router = useRouter();
   const hasChecked = useRef(false);
+  const { userId, isLoading: userLoading } = useCurrentUser();
 
   useEffect(() => {
+    if (userLoading) return;
+    if (!userId) {
+      setLoading(false);
+      router.replace('/auth/login');
+      return;
+    }
     // Prevent double execution (React Strict Mode)
     if (hasChecked.current) return;
     hasChecked.current = true;
@@ -34,19 +42,32 @@ export default function ExamPage(props: {
     // Fetch exam data
     Promise.all([
       api.tests.getPages(testId),
-      api.trials.getById(testId)
+      api.trials.getById(`${testId}?userId=${encodeURIComponent(userId)}`)
     ])
       .then(([pagesRes, trialRes]) => {
         setPages(pagesRes.pages || []);
         setTrialData(trialRes.data);
       })
       .catch((err) => {
+        const msg = (err as Error)?.message?.toLowerCase?.() || '';
+        console.log("Error fetching exam data:", msg);
+
+        if (msg.includes('forbidden') || msg.includes('403') || msg.includes('already_submitted')) {
+          setLoading(false);
+          console.log("Access denied to this test. Redirecting to overview.");
+          router.replace('/overview');
+          // Fallback in case router navigation is blocked
+          if (typeof window !== 'undefined') {
+            window.location.href = '/overview';
+          }
+          return;
+        }
         console.error(err);
       })
       .finally(() => {
         setLoading(false);
-      });
-  }, [testId, router]);
+        });
+      }, [testId, router, userId, userLoading]);
 
   if (loading) {
     return <Loading></Loading>
@@ -62,6 +83,8 @@ export default function ExamPage(props: {
           testTitle={trialData?.test?.title}
           durationMinutes={trialData?.test?.duration}
           realTestId={trialData?.test?.test_id}
+          trialType={trialData?.test?.type}
+          
         />
       </main>
     </div>

@@ -49,6 +49,7 @@ export async function responseRoutes(server: FastifyInstance) {
     const startTime = Date.now();
     try {
       const parsed = createResponsesSchema.safeParse(request.body);
+      console.log('Received response submission:', parsed.data?.trialId);
       if (!parsed.success) {
         reply.status(422);
         return { error: 'invalid_input', details: parsed.error.flatten() };

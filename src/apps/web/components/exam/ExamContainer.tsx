@@ -22,6 +22,7 @@ type ExamContainerProps = {
   testTitle?: string;
   durationMinutes?: number;
   realTestId?: string; // The test_id from database (e.g. 1767...)
+  trialType?: string;
 };
 
 export default function ExamContainer({
@@ -30,7 +31,8 @@ export default function ExamContainer({
   totalQuestions = 120,
   testTitle,
   durationMinutes,
-  realTestId
+  realTestId,
+  trialType: initialTrialType,
 }: ExamContainerProps) {
   // State
   const [zoom, setZoom] = useState(1);
@@ -44,18 +46,7 @@ export default function ExamContainer({
   const [showExitModal, setShowExitModal] = useState(false);
 
   //Get test type for exit handling
-  const [trialType, setTrialType] = useState<string | undefined>();
-
-  useEffect(() => {
-    (async () => {
-      try {
-        const res = await api.trials.getById(testId);
-        setTrialType(res?.data?.test?.type);
-      } catch {
-        // ignore
-      }
-    })();
-  }, [testId]);
+  const [trialType, setTrialType] = useState<string | undefined>(initialTrialType);
 
   // Giả lập câu hỏi (hoặc nhận từ props nếu API trả về chi tiết câu hỏi)
   // Re-generate questions with correct IDs if realTestId is present?
@@ -202,8 +193,7 @@ export default function ExamContainer({
     }
 
     try {
-      const type = trialType ?? (await api.trials.getById(testId))?.data?.test?.type;
-      if (type === 'practice') {
+      if (trialType === 'practice') {
         await api.trials.cleanup(testId);
       }
     } catch (err) {
