@@ -84,6 +84,7 @@ export default function ExamPage(props: {
           durationMinutes={trialData?.test?.duration}
           realTestId={trialData?.test?.test_id}
           trialType={trialData?.test?.type}
+          currentUserId={userId}
           
         />
       </main>

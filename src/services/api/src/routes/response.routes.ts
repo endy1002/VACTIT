@@ -87,9 +87,30 @@ export async function responseRoutes(server: FastifyInstance) {
         .select('*')
         .eq('test_id', trial.test_id);
 
-      if (qError || !questions) {
+      if (qError) {
         console.error('Error fetching questions for scoring:', qError);
-        // Fallback or just log? For now proceed with 0 score if fail
+      }
+
+      // 1.5. Satisfy Foreign Key constraint: ensure all submitted questions exist in Question table
+      const existingQIds = new Set((questions || []).map((q: any) => q.question_id));
+      const missingQuestions = rows
+        .filter(r => !existingQIds.has(r.question_id))
+        .map(r => ({
+          question_id: r.question_id,
+          test_id: trial.test_id,
+          relative_score: 1,
+          correct_option: null
+        }));
+
+      if (missingQuestions.length > 0) {
+        try {
+          await server.prisma.question.createMany({
+            data: missingQuestions,
+            skipDuplicates: true
+          });
+        } catch (e) {
+          console.error('Error creating missing questions:', e);
+        }
       }
 
       // Map question_id -> correct_option

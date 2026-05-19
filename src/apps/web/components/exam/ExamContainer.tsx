@@ -5,6 +5,7 @@ import ViewerPane from '@/components/exam/ViewerPane';
 import AnswerPanel from '@/components/exam/AnswerPanel';
 import { api } from '@/lib/api-client';
 import { useRouter } from 'next/navigation';
+import { mutate } from 'swr';
 
 //Chức năng: Giao diện làm bài
 
@@ -23,6 +24,7 @@ type ExamContainerProps = {
   durationMinutes?: number;
   realTestId?: string; // The test_id from database (e.g. 1767...)
   trialType?: string;
+  currentUserId?: string;
 };
 
 export default function ExamContainer({
@@ -33,6 +35,7 @@ export default function ExamContainer({
   durationMinutes,
   realTestId,
   trialType: initialTrialType,
+  currentUserId,
 }: ExamContainerProps) {
   // State
   const [zoom, setZoom] = useState(1);
@@ -130,37 +133,48 @@ export default function ExamContainer({
       responseTime: 0,
     }));
 
-    // Immediately show success modal & clear local storage (optimistic UI)
-    sessionStorage.setItem(`exam_cleared_${testId}`, '1');
-    localStorage.removeItem(`exam_${testId}_answers`);
-    localStorage.removeItem(`exam_${testId}_flags`);
-    localStorage.removeItem(`exam_${testId}_endtime`);
-
     setShowConfirmModal(false);
     setShowExpireModal(false);
     setShowExitModal(false);
     setShowLoadingModal(true);
-    
-    // Show success modal after a short delay for better UX
-    setTimeout(() => {
-      setShowLoadingModal(false);
-      setShowSuccessModal(true);
-    }, 1500);
 
-    // Submit to server in background
     try {
       const res = await api.responses.create({
         trialId: trialId,
         responses: responsesPayload,
       });
+
+      setShowLoadingModal(false);
+
       if (res.error) {
         console.error('Submit error:', res.error);
-        // Modal already shown, just log the error
+        alert('Có lỗi xảy ra khi nộp bài: ' + (res.error || 'Vui lòng thử lại'));
+      } else {
+        // Success
+        sessionStorage.setItem(`exam_cleared_${testId}`, '1');
+        localStorage.removeItem(`exam_${testId}_answers`);
+        localStorage.removeItem(`exam_${testId}_flags`);
+        localStorage.removeItem(`exam_${testId}_endtime`);
+        
+        setShowSuccessModal(true);
       }
     } catch (err) {
+      setShowLoadingModal(false);
       console.error('Submit network error:', err);
-      // Modal already shown, submission will be retried or handled separately
+      alert('Lỗi kết nối mạng. Kết quả của bạn có thể chưa được lưu. Vui lòng không tải lại trang và thử ấn nộp lại!');
     }
+  }
+
+  async function handleViewResult() {
+    const cacheKeys: Array<string> = [];
+    if (currentUserId) cacheKeys.push(`/api/students/${currentUserId}/trials`);
+    if (testId) cacheKeys.push(`/api/trials/${testId}/details`);
+
+    if (cacheKeys.length > 0) {
+      await Promise.allSettled(cacheKeys.map((key) => mutate(key)));
+    }
+
+    router.replace('/result');
   }
 
   function handleSuccessRedirect() {
@@ -301,7 +315,7 @@ export default function ExamContainer({
               </p>
 
               <button
-                onClick={() => router.replace('/result')}
+                onClick={handleViewResult}
                 className="w-full px-6 py-3 text-base font-semibold text-[#FFD700] bg-[#2864d2] hover:bg-[#1e4fc0] cursor-pointer rounded-lg transition-colors mb-4"
                 type="button"
               >

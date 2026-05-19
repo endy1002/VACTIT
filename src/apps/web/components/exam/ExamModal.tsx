@@ -1,15 +1,20 @@
 'use client';
 
 import React, { useState } from 'react';
-import Link from 'next/link';
+import { useRouter } from 'next/navigation';
+import { api } from '@/lib/api-client';
 
 interface ExamModalProps {
     exam: any; // ExamData
     onClose: () => void;
+    currentUserId?: string;
 }
 
-export default function ExamModal({ exam, onClose }: ExamModalProps) {
+export default function ExamModal({ exam, onClose, currentUserId }: ExamModalProps) {
+    const router = useRouter();
     const [isNavigating, setIsNavigating] = useState(false);
+    const [showNotification, setShowNotification] = useState(false);
+    const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
     if (!exam) return null;
 
@@ -22,6 +27,41 @@ export default function ExamModal({ exam, onClose }: ExamModalProps) {
             month: '2-digit',
             year: 'numeric',
         });
+    };
+
+    const handleTakeTest = async () => {
+        if (isNavigating) return;
+        setErrorMessage(null);
+        setShowNotification(false);
+
+        if (!currentUserId) {
+            setErrorMessage('Vui lòng đăng nhập để làm bài');
+            return;
+        }
+
+        setIsNavigating(true);
+        try {
+            const res = await api.trials.create({ testId: exam.id, userId: currentUserId });
+            const trial = res?.data;
+            const isAlreadyDone = res?.alreadyDone;
+
+            if (isAlreadyDone) {
+                setShowNotification(true);
+                return;
+            }
+
+            if (trial?.trial_id) {
+                router.push(`/exam/${trial.trial_id}`);
+                return;
+            }
+
+            setErrorMessage('Không thể tạo lượt thi. Vui lòng thử lại.');
+        } catch (err) {
+            console.error('Failed to start trial from modal', err);
+            setErrorMessage('Có lỗi xảy ra khi vào thi. Vui lòng thử lại.');
+        } finally {
+            setIsNavigating(false);
+        }
     };
 
     return (
@@ -106,28 +146,35 @@ export default function ExamModal({ exam, onClose }: ExamModalProps) {
 
                     {/* Action Buttons */}
                     <div className="space-y-3 mt-auto">
-                        <Link
-                            href={`/exam/${exam.id}`}
-                            className="block w-full"
-                            onClick={() => setIsNavigating(true)}
+                        <button
+                            onClick={handleTakeTest}
+                            disabled={isNavigating}
+                            className={`w-full bg-[#2864D2] text-[#FFD700] py-3.5 rounded-full font-bold text-base hover:bg-[#255BBD] transition-all flex items-center justify-center gap-3 ${isNavigating ? 'opacity-90 cursor-wait' : 'hover:-translate-y-0.5'}`}
                         >
-                            <button
-                                disabled={isNavigating}
-                                className={`w-full bg-[#2864D2] text-[#FFD700] py-3.5 rounded-full font-bold text-base hover:bg-[#255BBD] transition-all flex items-center justify-center gap-3 ${isNavigating ? 'opacity-90 cursor-wait' : 'hover:-translate-y-0.5'}`}
-                            >
-                                {isNavigating ? (
-                                    <>
-                                        <svg className="animate-spin h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                                            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                                            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                                        </svg>
-                                        Đang vào thi...
-                                    </>
-                                ) : (
-                                    "Vào thi ngay"
-                                )}
-                            </button>
-                        </Link>
+                            {isNavigating ? (
+                                <>
+                                    <svg className="animate-spin h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                                    </svg>
+                                    Đang vào thi...
+                                </>
+                            ) : (
+                                "Vào thi ngay"
+                            )}
+                        </button>
+
+                        {showNotification && (
+                            <div className="rounded-lg bg-yellow-50 text-yellow-800 px-4 py-3 text-sm">
+                                Bạn đã hoàn thành kỳ thi này. Bài thi chỉ được phép làm 1 lần.
+                            </div>
+                        )}
+
+                        {errorMessage && (
+                            <div className="rounded-lg bg-red-50 text-red-700 px-4 py-3 text-sm">
+                                {errorMessage}
+                            </div>
+                        )}
 
                         <button
                             onClick={onClose}

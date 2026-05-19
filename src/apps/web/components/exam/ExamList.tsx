@@ -288,6 +288,7 @@ export default function ExamList({ filterMode = 'all', sortKey = 'date', sortDir
                 <ExamModal
                     exam={selectedExam}
                     onClose={() => setSelectedExam(null)}
+                    currentUserId={currentUserId}
                 />
             )}
         </>
