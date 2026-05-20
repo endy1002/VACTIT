@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useEffect, useState } from 'react';
+import { useRouter } from 'next/navigation';
 import { api } from '@/lib/api-client';
 
 type Test = {
@@ -19,11 +20,12 @@ function Badge({ children }: { children: React.ReactNode }) {
 }
 
 export default function AdminTestsPage() {
+  const router = useRouter();
   const [tests, setTests] = useState<Test[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [loading, setLoading] = useState(false);
+  const [irtLoadingId, setIrtLoadingId] = useState<string | null>(null);
   const [showForm, setShowForm] = useState(false);
-  const [showStats, setShowStats] = useState<Test | null>(null);
   const [editing, setEditing] = useState<Test | null>(null);
   const [form, setForm] = useState<any>({ title: '', start_date: '', start_time: '', due_date: '', due_time: '', type: 'practice', status: 'regular', url: '', duration: '', answers: '', num_questions: '' });
 
@@ -235,6 +237,26 @@ export default function AdminTestsPage() {
     }
   }
 
+  async function triggerIrt(testId: string, title: string) {
+    if (!confirm(`Chấm lại IRT cho đề "${title}"?`)) return;
+
+    setIrtLoadingId(testId);
+    try {
+      const data = await api.jobs.triggerIrt(testId);
+      if (data?.ok === false) {
+        alert('Chấm IRT thất bại: ' + (data.error || 'Không xác định'));
+        return;
+      }
+
+      alert(`Đã gửi yêu cầu chấm IRT cho đề "${title}".`);
+    } catch (err: any) {
+      console.error('Failed to trigger IRT:', err);
+      alert('Lỗi kết nối API: ' + err.message);
+    } finally {
+      setIrtLoadingId(null);
+    }
+  }
+
   const filteredTests = tests.filter(t => t.title.toLowerCase().includes(searchTerm.trim().toLowerCase()));
 
   return (
@@ -296,7 +318,17 @@ export default function AdminTestsPage() {
                   <td className="p-3">
                     <button className="mr-3 text-blue-600" onClick={() => openEdit(t)}>✏️</button>
                     <button className="mr-3 text-red-600" onClick={() => remove(t.test_id)}>🗑️</button>
-                    <button className="text-slate-600" onClick={() => setShowStats(t)}>📊</button>
+                    {t.type === 'exam' && (
+                      <button
+                        className="mr-3 text-amber-600 disabled:opacity-50"
+                        onClick={() => triggerIrt(t.test_id, t.title)}
+                        disabled={irtLoadingId === t.test_id}
+                        title="Chấm lại IRT cho đề này"
+                      >
+                        {irtLoadingId === t.test_id ? '⏳' : 'IRT'}
+                      </button>
+                    )}
+                    <button className="text-slate-600" onClick={() => router.push(`/admin/stats?testId=${encodeURIComponent(t.test_id)}`)}>📊</button>
                   </td>
                 </tr>
               ))}
@@ -427,39 +459,6 @@ export default function AdminTestsPage() {
         </div>
       )}
 
-      {showStats && (
-        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
-          <div className="bg-white rounded-xl shadow-lg p-6 w-[520px]">
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="text-lg font-medium">Xem Thống kê</h3>
-              <button onClick={() => setShowStats(null)}>✖︎</button>
-            </div>
-
-            <div className="mb-4">
-              <h4 className="text-sm text-slate-600 mb-2">Phổ điểm {showStats.title}</h4>
-              <div className="w-full h-40 bg-slate-100 rounded flex items-end gap-2 p-4">
-                {/* simple mock histogram */}
-                {Array.from({ length: 10 }).map((_, i) => (
-                  <div key={i} className="flex-1 bg-blue-600" style={{ height: `${20 + i * 6}px` }} />
-                ))}
-              </div>
-            </div>
-
-            <div>
-              <h4 className="text-sm font-medium mb-2">Danh sách điểm</h4>
-              <table className="w-full text-sm">
-                <thead className="text-slate-500 text-left">
-                  <tr><th className="p-2">Học sinh</th><th className="p-2">Điểm</th><th className="p-2">Thời gian làm</th></tr>
-                </thead>
-                <tbody>
-                  <tr className="border-t"><td className="p-2">Trần Thanh</td><td className="p-2">850</td><td className="p-2">30.06.2025</td></tr>
-                  <tr className="border-t"><td className="p-2">Nguyễn A</td><td className="p-2">720</td><td className="p-2">30.06.2025</td></tr>
-                </tbody>
-              </table>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 }

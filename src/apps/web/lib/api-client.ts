@@ -149,6 +149,8 @@ export const api = {
     scoreTest: (data: { trialId: string; userId: string }) =>
       apiClient.post<any>('/api/jobs/score-test', data),
     getStatus: (jobId: string) => apiClient.get<any>(`/api/jobs/status/${jobId}`),
+    triggerIrt: (testId: string) =>
+      apiClient.post<any>(`/api/tests/${encodeURIComponent(testId)}/calculate-irt`, {}),
   },
   health: {
     check: () => apiClient.get<any>('/health'),
