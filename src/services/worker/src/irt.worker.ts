@@ -35,6 +35,10 @@ const irtWorker = new Worker(
             // String sort of "_1","_10","_100"... scrambles the order completely.
             const questionsUnsorted = await prisma.question.findMany({
                 where: { test_id: testId },
+                select: {
+                    question_id: true,
+                    correct_option: true,
+                },
             });
 
             // Sort by numeric index extracted from question_id
@@ -59,7 +63,15 @@ const irtWorker = new Worker(
             // 2. Fetch Trials for this test
             const trials = await prisma.trial.findMany({
                 where: { test_id: testId },
-                include: { responses: true },
+                select: {
+                    trial_id: true,
+                    responses: {
+                        select: {
+                            question_id: true,
+                            chosen_option: true,
+                        },
+                    },
+                },
             });
 
             if (trials.length === 0) {
@@ -79,14 +91,13 @@ const irtWorker = new Worker(
                 // Initialize vector of 0s for this student
                 // The R script expects 120 columns. If we have fewer questions, we might need to pad or the script might fail/adapt.
                 // Assuming the questions array represents the columns.
+                const responseMap = new Map(trial.responses.map(r => [r.question_id, r.chosen_option]));
                 const studentVector = questions.map(q => {
-                    // Find response for this question
-                    const response = trial.responses.find(r => r.question_id === q.question_id);
-
-                    if (!response || !response.chosen_option) return 0; // No answer = Incorrect
+                    const chosen = responseMap.get(q.question_id);
+                    if (!chosen) return 0; // No answer = Incorrect
 
                     const correct = correctOptionsMap.get(q.question_id);
-                    return (correct && response.chosen_option === correct) ? 1 : 0;
+                    return (correct && chosen === correct) ? 1 : 0;
                 });
 
                 responsesMatrix.push(studentVector);

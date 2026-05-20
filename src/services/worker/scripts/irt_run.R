@@ -154,7 +154,10 @@ process_responses <- function(data){
     readr::write_csv(student_scores, paste0('student_scores_2pl_', section_code, '.csv'))
     readr::write_csv(item_params, paste0('item_params_2pl_', section_code, '.csv'))
 
-    list(scores = student_scores, items = item_params, fit = fit, removed = nonvary, used = use_items)
+    rm(fit, data_use, data_items, fs)
+    gc()
+
+    list(scores = student_scores, items = item_params, removed = nonvary, used = use_items)
   }
 
   res_vi  <- fit_section(df, 1, 30, 'vi', 'Tiếng Việt')
