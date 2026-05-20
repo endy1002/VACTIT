@@ -9,6 +9,8 @@ import { devStore } from '@/lib/devMock';
 // Ensure this route runs in a Node.js runtime (required for Buffer and supabase-js)
 export const runtime = 'nodejs';
 
+const isAdminRole = (role: unknown) => String(role ?? '').trim().toLowerCase() === 'admin';
+
 // Attempt to load service env file from a few likely locations when vars are missing
 try {
   const need = !process.env.SUPABASE_SERVICE_ROLE_KEY || !(process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_API);
@@ -61,7 +63,7 @@ async function checkAdmin(req: NextRequest) {
         : null;
 
     if (!user) return NextResponse.json({ ok: false, error: 'Unauthorized' }, { status: 401 });
-    if (user.role !== 'Admin') return NextResponse.json({ ok: false, error: 'Forbidden' }, { status: 403 });
+    if (!isAdminRole(user.role)) return NextResponse.json({ ok: false, error: 'Forbidden' }, { status: 403 });
     return null;
   } catch (err) {
     console.error('checkAdmin error', err);

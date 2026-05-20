@@ -160,9 +160,9 @@ export default function LoginPage() {
       }
       console.log('Session found after login:', !!session);
 
-      const role = (session.user as any)?.role;
-      console.log('[Login] Redirecting to:', role === 'Admin' ? '/admin' : '/');
-      if (role === 'Admin') router.replace('/admin');
+      const role = String((session.user as any)?.role ?? '').trim().toLowerCase();
+      console.log('[Login] Redirecting to:', role === 'admin' ? '/admin' : '/');
+      if (role === 'admin') router.replace('/admin');
       else router.replace('/');
     } finally {
       // Non-negotiable: token is single-use

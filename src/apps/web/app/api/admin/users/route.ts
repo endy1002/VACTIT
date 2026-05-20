@@ -15,6 +15,8 @@ const SAFE_SELECT = {
 
 const ALLOWED_ROLES = new Set(['Student', 'Admin']);
 
+const isAdminRole = (role: unknown) => String(role ?? '').trim().toLowerCase() === 'admin';
+
 function serializeUser(user: any) {
   return {
     user_id: user.user_id,
@@ -48,7 +50,7 @@ async function ensureAdmin(req: NextRequest) {
     if (!user) {
       return NextResponse.json({ ok: false, error: 'Unauthorized' }, { status: 401 });
     }
-    if (user.role !== 'Admin') {
+    if (!isAdminRole(user.role)) {
       return NextResponse.json({ ok: false, error: 'Forbidden' }, { status: 403 });
     }
     return null;

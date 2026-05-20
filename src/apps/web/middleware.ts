@@ -6,6 +6,7 @@ const PUBLIC_PATHS = ['/auth/login', '/auth/signup', '/terms', '/_next', '/favic
 
 export async function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl;
+  const isAdminRole = (role: unknown) => String(role ?? '').trim().toLowerCase() === 'admin';
 
   // ============ MAINTENANCE MODE ============
   // Set MAINTENANCE_MODE=true on Vercel to block all users
@@ -24,12 +25,12 @@ export async function middleware(req: NextRequest) {
   if (!token) return NextResponse.redirect(new URL('/auth/login', req.url));
 
   // Check role for admin routes
-  if (pathname.startsWith('/admin') && token.role !== 'Admin') {
+  if (pathname.startsWith('/admin') && !isAdminRole(token.role)) {
     return NextResponse.redirect(new URL('/', req.url));
   }
 
   // Prevent unknown roles
-  if (!['Student', 'Author', 'Admin'].includes(token.role as string)) {
+  if (!['student', 'author', 'admin'].includes(String(token.role ?? '').trim().toLowerCase())) {
     return NextResponse.redirect(new URL('/auth/login', req.url));
   }
 

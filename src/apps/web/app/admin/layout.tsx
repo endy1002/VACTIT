@@ -3,7 +3,6 @@ import '../globals.css';
 import Sidebar from '../../components/admin/Sidebar';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/validations/auth';
-import { getPrisma } from '@/lib/prisma';
 import { redirect } from 'next/navigation';
 
 export const dynamic = 'force-dynamic';
@@ -13,6 +12,8 @@ export const metadata = {
 };
 
 export default async function AdminLayout({ children }: { children: React.ReactNode }) {
+  const isAdminRole = (role: unknown) => String(role ?? '').trim().toLowerCase() === 'admin';
+
   try {
     const session = await getServerSession(authOptions as any);
     if (!session) {
@@ -20,13 +21,8 @@ export default async function AdminLayout({ children }: { children: React.ReactN
     }
 
     console.log('Email from session:', session);
-    const email = (session as any).user?.email;
-    console.log('Extracted email:', email);
-    if (!email) return redirect('/auth/login');
-
-    const prisma = await getPrisma();
-    const user = await prisma.user.findUnique({ where: { email } });
-    if (!user || user.role !== 'Admin') {
+    const role = (session as any).user?.role;
+    if (!isAdminRole(role)) {
       return redirect('/');
     }
   } catch (err) {
